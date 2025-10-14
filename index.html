@@ -870,7 +870,7 @@
             }
 
             if (environment.isDemoMode && CONFIG.DEMO_TASKS) {
-                state.tasks = CONFIG.DEMO_TASKS.map(task => ({ ...task }));
+                state.tasks = CONFIG.DEMO_TASKS.map(normalizeTaskRecord);
                 state.tasksLoadedAt = new Date();
             }
 
@@ -1021,6 +1021,155 @@
             return value.length > limit ? `${value.slice(0, limit).trim()}…` : value;
         }
 
+        function toCamelCaseKey(key) {
+            if (!key) {
+                return '';
+            }
+
+            return key.toLowerCase().replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+        }
+
+        function normalizeNumber(value) {
+            if (typeof value === 'number' && Number.isFinite(value)) {
+                return value;
+            }
+
+            if (typeof value === 'string') {
+                const trimmed = value.trim();
+                if (!trimmed) {
+                    return null;
+                }
+
+                const parsed = Number.parseInt(trimmed, 10);
+                if (!Number.isNaN(parsed)) {
+                    return parsed;
+                }
+            }
+
+            return null;
+        }
+
+        function getTaskValue(task, key) {
+            if (!task || typeof task !== 'object' || !key) {
+                return undefined;
+            }
+
+            const variants = Array.from(new Set([
+                key,
+                key.toUpperCase(),
+                key.toLowerCase(),
+                toCamelCaseKey(key)
+            ].filter(Boolean)));
+
+            for (const variant of variants) {
+                if (Object.prototype.hasOwnProperty.call(task, variant)) {
+                    const value = task[variant];
+                    if (value !== undefined) {
+                        return value;
+                    }
+                }
+            }
+
+            return undefined;
+        }
+
+        function normalizeTaskRecord(task) {
+            if (!task || typeof task !== 'object') {
+                return {};
+            }
+
+            const source = task.task && typeof task.task === 'object' ? task.task : task;
+            const normalized = { ...source };
+
+            ['ID', 'TITLE', 'DESCRIPTION', 'STATUS', 'DEADLINE', 'CREATED_DATE', 'CLOSED_DATE', 'PRIORITY'].forEach(field => {
+                const value = getTaskValue(source, field);
+                if (value !== undefined) {
+                    if (field === 'ID' || field === 'STATUS' || field === 'PRIORITY') {
+                        normalized[field] = value === null || value === undefined ? value : value.toString();
+                    } else {
+                        normalized[field] = value;
+                    }
+                }
+            });
+
+            return normalized;
+        }
+
+        function normalizeTasksResponse(payload) {
+            let result = {};
+            if (payload && typeof payload === 'object') {
+                if (typeof payload.result !== 'undefined' && payload.result !== null) {
+                    result = payload.result;
+                } else if (payload.raw && typeof payload.raw === 'object') {
+                    if (typeof payload.raw.result !== 'undefined' && payload.raw.result !== null) {
+                        result = payload.raw.result;
+                    } else {
+                        result = payload.raw;
+                    }
+                } else {
+                    result = payload;
+                }
+            }
+
+            let rawTasks = [];
+            if (Array.isArray(result.tasks)) {
+                rawTasks = result.tasks;
+            } else if (Array.isArray(result)) {
+                rawTasks = result;
+            }
+
+            const tasks = rawTasks.map(normalizeTaskRecord);
+
+            const totalCandidates = [
+                payload && payload.total,
+                payload && payload.raw && payload.raw.total,
+                result && result.total,
+                result && result.tasks_total,
+                result && result.tasks_count,
+                result && result.tasksCount
+            ];
+
+            let total = null;
+            for (const candidate of totalCandidates) {
+                const numeric = normalizeNumber(candidate);
+                if (numeric !== null) {
+                    total = numeric;
+                    break;
+                }
+            }
+
+            const nextCandidates = [
+                payload && payload.next,
+                payload && payload.raw && payload.raw.next,
+                result && result.next
+            ];
+
+            let next = null;
+            for (const candidate of nextCandidates) {
+                const numeric = normalizeNumber(candidate);
+                if (numeric !== null) {
+                    next = numeric;
+                    break;
+                }
+            }
+
+            return { tasks, total, next };
+        }
+
+        function normalizeBitrixResponse(data) {
+            if (!data || typeof data !== 'object') {
+                return { result: null, total: null, next: null, time: null, raw: data };
+            }
+
+            return {
+                result: typeof data.result !== 'undefined' ? data.result : null,
+                total: normalizeNumber(data.total),
+                next: normalizeNumber(data.next),
+                time: data.time || null,
+                raw: data
+            };
+        }
+
         function buildBitrixParams(params = {}) {
             const search = new URLSearchParams();
             const stack = Object.keys(params || {}).map(key => ({
@@ -1063,7 +1212,8 @@
         }
 
         function getStatusCode(task) {
-            const status = Number.parseInt(task.STATUS, 10);
+            const rawStatus = getTaskValue(task, 'STATUS');
+            const status = Number.parseInt(rawStatus, 10);
             return Number.isNaN(status) ? 0 : status;
         }
 
@@ -1101,17 +1251,18 @@
         }
 
         function getPriorityBadge(priority) {
-            if (priority === '2') {
+            const normalized = priority === null || priority === undefined ? '' : priority.toString();
+            if (normalized === '2') {
                 return '🔥 Высокий приоритет';
             }
-            if (priority === '1') {
+            if (normalized === '1') {
                 return '⚡ Средний приоритет';
             }
             return '';
         }
 
         function getTaskDeadline(task) {
-            const deadline = parseDate(task.DEADLINE);
+            const deadline = parseDate(getTaskValue(task, 'DEADLINE'));
             if (!deadline) {
                 return { text: 'Срок не указан', overdue: false };
             }
@@ -1123,12 +1274,14 @@
         }
 
         function renderTask(task) {
-            const title = escapeHTML(task.TITLE || 'Без названия');
-            const description = escapeHTML(truncate(getPlainText(task.DESCRIPTION) || 'Описание отсутствует'));
-            const priorityLabel = getPriorityBadge(task.PRIORITY);
-            const statusClass = getTaskStatusClass(task.STATUS);
-            const statusText = getTaskStatusText(task.STATUS);
+            const title = escapeHTML(getTaskValue(task, 'TITLE') || 'Без названия');
+            const description = escapeHTML(truncate(getPlainText(getTaskValue(task, 'DESCRIPTION')) || 'Описание отсутствует'));
+            const priorityLabel = getPriorityBadge(getTaskValue(task, 'PRIORITY'));
+            const statusValue = getTaskValue(task, 'STATUS');
+            const statusClass = getTaskStatusClass(statusValue);
+            const statusText = getTaskStatusText(statusValue);
             const deadline = getTaskDeadline(task);
+            const taskId = getTaskValue(task, 'ID');
 
             return `
                 <article class="task-item">
@@ -1140,7 +1293,7 @@
                     <p class="task-description">${description}</p>
                     <div class="task-meta">
                         <span class="task-deadline${deadline.overdue ? ' deadline-overdue' : ''}">${escapeHTML(deadline.text)}</span>
-                        <span class="task-id">ID: ${escapeHTML(task.ID)}</span>
+                        <span class="task-id">ID: ${escapeHTML(taskId || '')}</span>
                     </div>
                 </article>
             `;
@@ -1149,7 +1302,7 @@
         function isTaskOverdue(task, now = new Date()) {
             const status = getStatusCode(task);
             if (status >= 5) return false;
-            const deadline = parseDate(task.DEADLINE);
+            const deadline = parseDate(getTaskValue(task, 'DEADLINE'));
             return deadline ? deadline < now : false;
         }
 
@@ -1157,18 +1310,18 @@
             if (getStatusCode(task) !== 5) {
                 return false;
             }
-            const closedDate = parseDate(task.CLOSED_DATE);
+            const closedDate = parseDate(getTaskValue(task, 'CLOSED_DATE'));
             if (closedDate) {
                 return closedDate >= todayStart && closedDate < tomorrowStart;
             }
-            const createdDate = parseDate(task.CREATED_DATE);
+            const createdDate = parseDate(getTaskValue(task, 'CREATED_DATE'));
             return createdDate ? createdDate >= todayStart && createdDate < tomorrowStart : false;
         }
 
         async function fetchTasks({ force = false } = {}) {
             if (environment.isDemoMode) {
                 if (!state.tasks.length) {
-                    state.tasks = (CONFIG.DEMO_TASKS || []).map(task => ({ ...task }));
+                    state.tasks = (CONFIG.DEMO_TASKS || []).map(normalizeTaskRecord);
                     state.tasksLoadedAt = new Date();
                     state.tasksTotal = state.tasks.length;
                 }
@@ -1184,29 +1337,17 @@
                     filter: {
                         'RESPONSIBLE_ID': bitrixUserId
                     },
-                    select: [
-                        'ID',
-                        'TITLE',
-                        'DESCRIPTION',
-                        'STATUS',
-                        'DEADLINE',
-                        'PRIORITY',
-                        'CREATED_BY',
-                        'CREATED_DATE',
-                        'CLOSED_DATE'
-                    ],
-                    order: {
-                        'DEADLINE': 'ASC'
-                    },
+                    select: ['ID', 'TITLE', 'DESCRIPTION', 'STATUS', 'DEADLINE', 'CREATED_DATE', 'CLOSED_DATE', 'PRIORITY'],
+                    order: { 'DEADLINE': 'ASC' },
                     start: 0
                 };
 
                 const tasks = [];
                 const seenOffsets = new Set();
                 let next = 0;
-                let total = 0;
+                let total = null;
 
-                while (typeof next === 'number' && !seenOffsets.has(next) && tasks.length < 2000) {
+                while (next !== null && !seenOffsets.has(next) && tasks.length < 2000) {
                     seenOffsets.add(next);
 
                     const response = await callBitrixAPI('tasks.task.list', {
@@ -1214,16 +1355,34 @@
                         start: next
                     });
 
-                    const batch = response.tasks || [];
-                    tasks.push(...batch);
-                    total = typeof response.total === 'number' ? response.total : total;
+                    const { tasks: batch, total: pageTotal, next: nextPointer } = normalizeTasksResponse(response);
 
-                    next = typeof response.next === 'number' ? response.next : null;
+                    if (batch.length) {
+                        tasks.push(...batch);
+                    }
+
+                    if (pageTotal !== null) {
+                        total = total === null ? pageTotal : Math.max(total, pageTotal);
+                    }
+
+                    if (nextPointer !== null && !Number.isNaN(nextPointer) && !seenOffsets.has(nextPointer)) {
+                        next = nextPointer;
+                    } else {
+                        next = null;
+                    }
+
+                    if (!batch.length && next === null) {
+                        break;
+                    }
+                }
+
+                if (total === null || tasks.length > total) {
+                    total = tasks.length;
                 }
 
                 state.tasks = tasks;
                 state.tasksLoadedAt = new Date();
-                state.tasksTotal = total || tasks.length;
+                state.tasksTotal = total;
             }
 
             return state.tasks;
@@ -1248,14 +1407,24 @@
             const sorted = [...tasks];
             if (filterType === 'completed') {
                 sorted.sort((a, b) => {
-                    const aDate = parseDate(a.CLOSED_DATE) || parseDate(a.DEADLINE) || parseDate(a.CREATED_DATE) || new Date(0);
-                    const bDate = parseDate(b.CLOSED_DATE) || parseDate(b.DEADLINE) || parseDate(b.CREATED_DATE) || new Date(0);
+                    const aDate = parseDate(getTaskValue(a, 'CLOSED_DATE'))
+                        || parseDate(getTaskValue(a, 'DEADLINE'))
+                        || parseDate(getTaskValue(a, 'CREATED_DATE'))
+                        || new Date(0);
+                    const bDate = parseDate(getTaskValue(b, 'CLOSED_DATE'))
+                        || parseDate(getTaskValue(b, 'DEADLINE'))
+                        || parseDate(getTaskValue(b, 'CREATED_DATE'))
+                        || new Date(0);
                     return bDate - aDate;
                 });
             } else {
                 sorted.sort((a, b) => {
-                    const aDate = parseDate(a.DEADLINE) || parseDate(a.CREATED_DATE) || new Date(8640000000000000);
-                    const bDate = parseDate(b.DEADLINE) || parseDate(b.CREATED_DATE) || new Date(8640000000000000);
+                    const aDate = parseDate(getTaskValue(a, 'DEADLINE'))
+                        || parseDate(getTaskValue(a, 'CREATED_DATE'))
+                        || new Date(8640000000000000);
+                    const bDate = parseDate(getTaskValue(b, 'DEADLINE'))
+                        || parseDate(getTaskValue(b, 'CREATED_DATE'))
+                        || new Date(8640000000000000);
                     return aDate - bDate;
                 });
             }
@@ -1368,9 +1537,11 @@
                     summary.overdue += 1;
                 }
 
-                if (task.PRIORITY === '2') {
+                const priority = getTaskValue(task, 'PRIORITY');
+                const normalizedPriority = priority === null || priority === undefined ? '' : priority.toString();
+                if (normalizedPriority === '2') {
                     summary.highPriority += 1;
-                } else if (task.PRIORITY === '1') {
+                } else if (normalizedPriority === '1') {
                     summary.mediumPriority += 1;
                 } else {
                     summary.lowPriority += 1;
@@ -1522,16 +1693,16 @@
                     start: 0
                 });
 
-                const tasks = response.tasks || [];
-                const total = typeof response.total === 'number' ? response.total : tasks.length;
+                const { tasks, total } = normalizeTasksResponse(response);
+                const displayTotal = total !== null ? total : tasks.length;
 
                 if (tasks.length) {
                     const preview = tasks
                         .slice(0, 3)
-                        .map(task => `#${escapeHTML(task.ID || '')} — ${escapeHTML(task.TITLE || 'Без названия')}`)
+                        .map(task => `#${escapeHTML(getTaskValue(task, 'ID') || '')} — ${escapeHTML(getTaskValue(task, 'TITLE') || 'Без названия')}`)
                         .join('<br>');
 
-                    connectionResultEl.innerHTML = `Успешно: получено задач — ${total || tasks.length}.<br><span class="hint">Примеры:<br>${preview}</span>`;
+                    connectionResultEl.innerHTML = `Успешно: получено задач — ${displayTotal}.<br><span class="hint">Примеры:<br>${preview}</span>`;
                 } else {
                     connectionResultEl.textContent = 'Подключение установлено, но задачи для указанного пользователя не найдены.';
                 }
@@ -1559,7 +1730,8 @@
 
             if (!bitrixTransportState.preferProxy) {
                 try {
-                    return await performDirectBitrixRequest(url);
+                    const data = await performDirectBitrixRequest(url);
+                    return normalizeBitrixResponse(data);
                 } catch (error) {
                     if (error && error.isNetworkError) {
                         networkError = error;
@@ -1580,7 +1752,8 @@
             }
 
             try {
-                return await performProxyBitrixRequest({ webhook, method, params });
+                const data = await performProxyBitrixRequest({ webhook, method, params });
+                return normalizeBitrixResponse(data);
             } catch (error) {
                 if (networkError) {
                     error.message = `${error.message} (также прямой запрос завершился ошибкой: ${networkError.message})`;
@@ -1632,11 +1805,7 @@
                 throw new Error(data.error_description || data.error);
             }
 
-            if (typeof data.result === 'undefined') {
-                return {};
-            }
-
-            return data.result;
+            return data;
         }
 
         async function performProxyBitrixRequest({ webhook, method, params }) {
@@ -1697,11 +1866,7 @@
                 throw new Error(data.error_description || data.error);
             }
 
-            if (typeof data.result === 'undefined') {
-                return {};
-            }
-
-            return data.result;
+            return data;
         }
     </script>
 </body>
