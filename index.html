@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Панель управления агентством</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .menu-button {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            background-color: var(--tg-theme-button-color);
+            color: var(--tg-theme-button-text-color);
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            text-decoration: none;
+            text-align: center;
+        }
+        
+        .menu-button:hover {
+            opacity: 0.8;
+        }
+        
+        .stats {
+            background-color: var(--tg-theme-secondary-bg-color);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Панель управления</h1>
+            <p id="welcome">Добро пожаловать!</p>
+        </div>
+        
+        <div class="stats">
+            <h3>Статистика сегодня</h3>
+            <div class="stat-item">
+                <span>Активные проекты:</span>
+                <strong>12</strong>
+            </div>
+            <div class="stat-item">
+                <span>Задачи на сегодня:</span>
+                <strong>8</strong>
+            </div>
+            <div class="stat-item">
+                <span>Завершенные задачи:</span>
+                <strong>15</strong>
+            </div>
+        </div>
+        
+        <button class="menu-button" onclick="showProjects()">📁 Проекты</button>
+        <button class="menu-button" onclick="showAnalytics()">📊 Аналитика</button>
+        <button class="menu-button" onclick="showTeam()">👥 Команда</button>
+        <button class="menu-button" onclick="showSettings()">⚙️ Настройки</button>
+    </div>
+
+    <script>
+        // Инициализация Telegram Web App
+        let tg = window.Telegram.WebApp;
+        
+        // Подготовка приложения
+        tg.ready();
+        tg.expand();
+        
+        // Получение данных пользователя
+        let user = tg.initDataUnsafe.user;
+        if (user) {
+            document.getElementById('welcome').textContent = 
+                `Добро пожаловать, ${user.first_name}!`;
+        }
+        
+        // Настройка кнопки "Назад"
+        tg.BackButton.show();
+        tg.BackButton.onClick(function() {
+            tg.close();
+        });
+        
+        // Функции для кнопок меню
+        function showProjects() {
+            tg.showAlert('Здесь будет список проектов');
+        }
+        
+        function showAnalytics() {
+            tg.showAlert('Здесь будет аналитика');
+        }
+        
+        function showTeam() {
+            tg.showAlert('Здесь будет информация о команде');
+        }
+        
+        function showSettings() {
+            tg.showAlert('Здесь будут настройки');
+        }
+        
+        // Уведомляем Telegram что приложение готово
+        tg.ready();
+    </script>
+</body>
+</html>
