@@ -622,7 +622,8 @@
 
         const environment = {
             isTelegram: Boolean(tg && tg.initDataUnsafe && tg.initDataUnsafe.user),
-            isDemoMode: Boolean(CONFIG.DEMO_MODE)
+            isDemoMode: Boolean(CONFIG.DEMO_MODE),
+            useProxyOnly: false
         };
 
         if (!environment.isTelegram && !environment.isDemoMode && CONFIG.DEMO_TASKS && CONFIG.DEMO_TASKS.length) {
@@ -973,6 +974,67 @@
             return createdDate ? createdDate >= todayStart && createdDate < tomorrowStart : false;
         }
 
+        function normalizeTaskListResponse(payload) {
+            if (!payload) {
+                return [];
+            }
+
+            if (Array.isArray(payload)) {
+                return payload
+                    .map(item => {
+                        if (item && typeof item === 'object' && 'task' in item) {
+                            return item.task;
+                        }
+                        return item;
+                    })
+                    .filter(item => item && typeof item === 'object');
+            }
+
+            if (typeof payload === 'object') {
+                if (Array.isArray(payload.tasks)) {
+                    return normalizeTaskListResponse(payload.tasks);
+                }
+
+                if (payload.tasks && typeof payload.tasks === 'object') {
+                    return normalizeTaskListResponse(Object.values(payload.tasks));
+                }
+
+                if (Array.isArray(payload.result)) {
+                    return normalizeTaskListResponse(payload.result);
+                }
+
+                if (payload.result && typeof payload.result === 'object') {
+                    return normalizeTaskListResponse(payload.result);
+                }
+
+                if (Array.isArray(payload.list)) {
+                    return normalizeTaskListResponse(payload.list);
+                }
+
+                if (payload.list && typeof payload.list === 'object') {
+                    return normalizeTaskListResponse(Object.values(payload.list));
+                }
+
+                if (Array.isArray(payload.items)) {
+                    return normalizeTaskListResponse(payload.items);
+                }
+
+                if (payload.items && typeof payload.items === 'object') {
+                    return normalizeTaskListResponse(Object.values(payload.items));
+                }
+
+                if (Array.isArray(payload.data)) {
+                    return normalizeTaskListResponse(payload.data);
+                }
+
+                if (payload.data && typeof payload.data === 'object') {
+                    return normalizeTaskListResponse(payload.data);
+                }
+            }
+
+            return [];
+        }
+
         async function fetchTasks({ force = false } = {}) {
             if (environment.isDemoMode) {
                 if (!state.tasks.length) {
@@ -1007,7 +1069,8 @@
                     }
                 });
 
-                state.tasks = response.tasks || [];
+                const normalizedTasks = normalizeTaskListResponse(response);
+                state.tasks = normalizedTasks.map(task => ({ ...task }));
                 state.tasksLoadedAt = new Date();
             }
 
@@ -1271,6 +1334,19 @@
             container.innerHTML = `<ul class="team-list">${members.map(renderTeamMember).join('')}</ul>`;
         }
 
+        function shouldUseProxyForError(error) {
+            if (!error) {
+                return false;
+            }
+
+            if (error instanceof TypeError) {
+                return true;
+            }
+
+            const message = typeof error.message === 'string' ? error.message.toLowerCase() : '';
+            return message.includes('failed to fetch') || message.includes('networkerror') || message.includes('cors');
+        }
+
         async function callBitrixAPI(method, params = {}) {
             if (!CONFIG.BITRIX_WEBHOOK) {
                 throw new Error('BITRIX_WEBHOOK не задан');
@@ -1297,24 +1373,80 @@
                 }
             });
 
-            const response = await fetch(url.toString(), {
-                method: 'GET',
+            let directError = null;
+
+            if (!environment.useProxyOnly) {
+                try {
+                    const response = await fetch(url.toString(), {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    const data = await response.json();
+
+                    if (data.error) {
+                        throw new Error(data.error_description || data.error);
+                    }
+
+                    if (data.result === undefined) {
+                        console.warn('Bitrix direct request returned unexpected payload structure.', data);
+                        return data;
+                    }
+
+                    return data.result;
+                } catch (error) {
+                    if (!shouldUseProxyForError(error)) {
+                        throw error;
+                    }
+
+                    directError = error;
+                    environment.useProxyOnly = true;
+                    console.warn('Bitrix direct request failed, switching to proxy mode.', error);
+                }
+            }
+
+            const proxyResponse = await fetch('/api/bitrix', {
+                method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
-                }
+                },
+                body: JSON.stringify({
+                    webhook: CONFIG.BITRIX_WEBHOOK,
+                    method,
+                    params
+                })
             });
 
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+            if (!proxyResponse.ok) {
+                const message = await proxyResponse.text();
+                const errorMessage = message ? ` ${message}` : '';
+                throw new Error(`Bitrix proxy error: ${proxyResponse.status}${errorMessage}`);
             }
 
-            const data = await response.json();
-
-            if (data.error) {
-                throw new Error(data.error_description || data.error);
+            let proxyData;
+            try {
+                proxyData = await proxyResponse.json();
+            } catch (parseError) {
+                const fallbackMessage = directError && directError.message ? `; direct error: ${directError.message}` : '';
+                throw new Error(`Bitrix proxy parse error${fallbackMessage}`);
             }
 
-            return data.result;
+            if (proxyData.error) {
+                throw new Error(proxyData.error_description || proxyData.error);
+            }
+
+            if (proxyData.result === undefined) {
+                console.warn('Bitrix proxy returned unexpected payload structure.', proxyData);
+                return proxyData;
+            }
+
+            return proxyData.result;
         }
     </script>
 </body>
