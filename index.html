@@ -9,7 +9,7 @@
         body {
             margin: 0;
             padding: 20px;
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
             background-color: var(--tg-theme-bg-color);
             color: var(--tg-theme-text-color);
             min-height: 100vh;
@@ -56,40 +56,133 @@
             justify-content: space-between;
             margin: 10px 0;
         }
+        
+        .task-list {
+            margin-top: 20px;
+        }
+        
+        .task-item {
+            background-color: var(--tg-theme-secondary-bg-color);
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid var(--tg-theme-button-color);
+        }
+        
+        .task-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .task-description {
+            font-size: 14px;
+            color: var(--tg-theme-hint-color);
+            margin-bottom: 10px;
+        }
+        
+        .task-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--tg-theme-hint-color);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: var(--tg-theme-hint-color);
+        }
+        
+        .error {
+            text-align: center;
+            padding: 20px;
+            color: #ff4444;
+            background-color: rgba(255, 68, 68, 0.1);
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        
+        .page {
+            display: none;
+        }
+        
+        .page.active {
+            display: block;
+        }
+        
+        .back-button {
+            background-color: var(--tg-theme-secondary-bg-color);
+            color: var(--tg-theme-text-color);
+            border: 1px solid var(--tg-theme-button-color);
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>Панель управления</h1>
-            <p id="welcome">Добро пожаловать!</p>
+        <!-- Главная страница -->
+        <div id="dashboard" class="page active">
+            <div class="header">
+                <h1>Панель управления</h1>
+                <p id="welcome">Добро пожаловать!</p>
+            </div>
+            
+            <div class="stats">
+                <h3>Статистика сегодня</h3>
+                <div class="stat-item">
+                    <span>Активные задачи:</span>
+                    <strong id="activeTasks">-</strong>
+                </div>
+                <div class="stat-item">
+                    <span>Выполнено сегодня:</span>
+                    <strong id="completedTasks">-</strong>
+                </div>
+                <div class="stat-item">
+                    <span>Просрочено:</span>
+                    <strong id="overdueTasks">-</strong>
+                </div>
+            </div>
+            
+            <button class="menu-button" onclick="showTasks()">📋 Текущие задачи</button>
+            <button class="menu-button" onclick="showAnalytics()">📊 Аналитика</button>
+            <button class="menu-button" onclick="showTeam()">👥 Команда</button>
+            <button class="menu-button" onclick="showSettings()">⚙️ Настройки</button>
         </div>
-        
-        <div class="stats">
-            <h3>Статистика сегодня</h3>
-            <div class="stat-item">
-                <span>Активные проекты:</span>
-                <strong>12</strong>
-            </div>
-            <div class="stat-item">
-                <span>Задачи на сегодня:</span>
-                <strong>8</strong>
-            </div>
-            <div class="stat-item">
-                <span>Завершенные задачи:</span>
-                <strong>15</strong>
+
+        <!-- Страница задач -->
+        <div id="tasks" class="page">
+            <button class="back-button" onclick="showDashboard()">← Назад</button>
+            <h2>Мои задачи</h2>
+            <div id="tasksContent">
+                <div class="loading">Загрузка задач...</div>
             </div>
         </div>
-        
-        <button class="menu-button" onclick="showProjects()">📁 Проекты</button>
-        <button class="menu-button" onclick="showAnalytics()">📊 Аналитика</button>
-        <button class="menu-button" onclick="showTeam()">👥 Команда</button>
-        <button class="menu-button" onclick="showSettings()">⚙️ Настройки</button>
     </div>
 
     <script>
+        // Конфигурация
+        const CONFIG = {
+            // ЗАМЕНИТЕ НА ВАШ WEBHOOK URL ОТ БИТРИКС24
+            BITRIX_WEBHOOK: 'https://mpb.bitrix24.kz/rest/13/f92fhs0h39vmg991/',
+            
+            // Соответствие Telegram ID и Bitrix24 User ID
+            USER_MAPPING: {
+                '721249582': '13',
+                // Добавьте сюда соответствие ваших пользователей
+                // 'telegram_id': 'bitrix_user_id'
+                // Пример:
+                // '123456789': '1',
+                // '987654321': '2'
+            }
+        };
+
         // Инициализация Telegram Web App
         let tg = window.Telegram.WebApp;
+        let currentUser = null;
+        let bitrixUserId = null;
         
         // Подготовка приложения
         tg.ready();
@@ -98,31 +191,226 @@
         // Получение данных пользователя
         let user = tg.initDataUnsafe.user;
         if (user) {
+            currentUser = user;
             document.getElementById('welcome').textContent = 
                 `Добро пожаловать, ${user.first_name}!`;
+            
+            // Определяем ID пользователя в Битрикс24
+            bitrixUserId = CONFIG.USER_MAPPING[user.id.toString()];
+            if (!bitrixUserId) {
+                console.warn('Пользователь не найден в маппинге:', user.id);
+                // По умолчанию используем ID 1 (администратор)
+                bitrixUserId = '1';
+            }
+            
+            // Загружаем статистику
+            loadDashboardStats();
         }
         
         // Настройка кнопки "Назад"
         tg.BackButton.show();
         tg.BackButton.onClick(function() {
-            tg.close();
+            const activePage = document.querySelector('.page.active');
+            if (activePage.id === 'dashboard') {
+                tg.close();
+            } else {
+                showDashboard();
+            }
         });
-        
-        // Функции для кнопок меню
-        function showProjects() {
-            tg.showAlert('Здесь будет список проектов');
+
+        // Функции навигации
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(page => {
+                page.classList.remove('active');
+            });
+            document.getElementById(pageId).classList.add('active');
         }
-        
+
+        function showDashboard() {
+            showPage('dashboard');
+            loadDashboardStats();
+        }
+
+        function showTasks() {
+            showPage('tasks');
+            loadUserTasks();
+        }
+
         function showAnalytics() {
-            tg.showAlert('Здесь будет аналитика');
+            tg.showAlert('Аналитика будет добавлена в следующих версиях');
         }
-        
+
         function showTeam() {
-            tg.showAlert('Здесь будет информация о команде');
+            tg.showAlert('Информация о команде будет добавлена в следующих версиях');
         }
-        
+
         function showSettings() {
-            tg.showAlert('Здесь будут настройки');
+            tg.showAlert('Настройки будут добавлены в следующих версиях');
+        }
+
+        // Функции для работы с Битрикс24
+        async function callBitrixAPI(method, params = {}) {
+            try {
+                const url = new URL(CONFIG.BITRIX_WEBHOOK + method + '.json');
+                
+                // Добавляем параметры в URL
+                Object.keys(params).forEach(key => {
+                    if (typeof params[key] === 'object') {
+                        Object.keys(params[key]).forEach(subKey => {
+                            url.searchParams.append(`${key}[${subKey}]`, params[key][subKey]);
+                        });
+                    } else {
+                        url.searchParams.append(key, params[key]);
+                    }
+                });
+
+                const response = await fetch(url.toString(), {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error_description || data.error);
+                }
+
+                return data.result;
+            } catch (error) {
+                console.error('Bitrix API Error:', error);
+                throw error;
+            }
+        }
+
+        // Загрузка статистики для дашборда
+        async function loadDashboardStats() {
+            if (!bitrixUserId) return;
+
+            try {
+                // Получаем задачи пользователя
+                const tasks = await callBitrixAPI('tasks.task.list', {
+                    filter: {
+                        'RESPONSIBLE_ID': bitrixUserId
+                    },
+                    select: ['ID', 'STATUS', 'DEADLINE', 'CREATED_DATE']
+                });
+
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                let activeTasks = 0;
+                let completedToday = 0;
+                let overdueTasks = 0;
+
+                tasks.tasks.forEach(task => {
+                    // Активные задачи (статус меньше 5 = не завершены)
+                    if (parseInt(task.STATUS) < 5) {
+                        activeTasks++;
+                        
+                        // Проверяем просроченные
+                        if (task.DEADLINE) {
+                            const deadline = new Date(task.DEADLINE);
+                            if (deadline < today) {
+                                overdueTasks++;
+                            }
+                        }
+                    }
+                    
+                    // Завершенные сегодня (статус 5 = завершена)
+                    if (parseInt(task.STATUS) === 5) {
+                        const closedDate = new Date(task.CLOSED_DATE || task.CREATED_DATE);
+                        if (closedDate >= today) {
+                            completedToday++;
+                        }
+                    }
+                });
+
+                // Обновляем интерфейс
+                document.getElementById('activeTasks').textContent = activeTasks;
+                document.getElementById('completedTasks').textContent = completedToday;
+                document.getElementById('overdueTasks').textContent = overdueTasks;
+
+            } catch (error) {
+                console.error('Ошибка загрузки статистики:', error);
+                document.getElementById('activeTasks').textContent = 'Ошибка';
+                document.getElementById('completedTasks').textContent = 'Ошибка';
+                document.getElementById('overdueTasks').textContent = 'Ошибка';
+            }
+        }
+
+        // Загрузка задач пользователя
+        async function loadUserTasks() {
+            const container = document.getElementById('tasksContent');
+            container.innerHTML = '<div class="loading">Загрузка задач...</div>';
+
+            if (!bitrixUserId) {
+                container.innerHTML = '<div class="error">Пользователь не найден в системе</div>';
+                return;
+            }
+
+            try {
+                // Получаем активные задачи пользователя
+                const tasks = await callBitrixAPI('tasks.task.list', {
+                    filter: {
+                        'RESPONSIBLE_ID': bitrixUserId,
+                        '<STATUS': 5  // Статус меньше 5 (не завершена)
+                    },
+                    select: ['ID', 'TITLE', 'DESCRIPTION', 'STATUS', 'DEADLINE', 'PRIORITY', 'CREATED_BY'],
+                    order: {
+                        'DEADLINE': 'ASC'
+                    }
+                });
+
+                if (!tasks.tasks || tasks.tasks.length === 0) {
+                    container.innerHTML = '<div class="loading">У вас нет активных задач</div>';
+                    return;
+                }
+
+                // Отображаем задачи
+                let tasksHTML = '';
+                tasks.tasks.forEach(task => {
+                    const deadline = task.DEADLINE ? new Date(task.DEADLINE).toLocaleDateString('ru-RU') : 'Не указан';
+                    const priority = task.PRIORITY === '2' ? '🔥' : task.PRIORITY === '1' ? '⚡' : '';
+                    const status = getTaskStatusText(task.STATUS);
+                    
+                    tasksHTML += `
+                        <div class="task-item">
+                            <div class="task-title">${priority} ${task.TITLE}</div>
+                            <div class="task-description">${task.DESCRIPTION || 'Описание отсутствует'}</div>
+                            <div class="task-meta">
+                                <span>Статус: ${status}</span>
+                                <span>Срок: ${deadline}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                container.innerHTML = tasksHTML;
+
+            } catch (error) {
+                console.error('Ошибка загрузки задач:', error);
+                container.innerHTML = `<div class="error">Ошибка загрузки задач: ${error.message}</div>`;
+            }
+        }
+
+        // Получение текста статуса задачи
+        function getTaskStatusText(status) {
+            const statusMap = {
+                '1': 'Новая',
+                '2': 'Ожидает выполнения',
+                '3': 'Выполняется',
+                '4': 'Ожидает контроля',
+                '5': 'Завершена',
+                '6': 'Отложена',
+                '7': 'Отклонена'
+            };
+            return statusMap[status] || 'Неизвестно';
         }
         
         // Уведомляем Telegram что приложение готово
