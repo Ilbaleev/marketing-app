@@ -1,0 +1,1453 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Панель управления агентством</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            color-scheme: light dark;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
+            background-color: var(--tg-theme-bg-color, #101010);
+            color: var(--tg-theme-text-color, #f5f5f5);
+            min-height: 100vh;
+        }
+
+        a {
+            color: var(--tg-theme-link-color, #50a8eb);
+        }
+
+        .container {
+            max-width: 420px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            margin: 0 0 8px;
+            font-size: 26px;
+        }
+
+        .hint {
+            margin: 8px 0 0;
+            font-size: 13px;
+            color: var(--tg-theme-hint-color, rgba(255, 255, 255, 0.6));
+        }
+
+        .menu {
+            display: grid;
+            gap: 10px;
+        }
+
+        .menu-button {
+            display: block;
+            width: 100%;
+            padding: 16px;
+            background-color: var(--tg-theme-button-color, #2aabee);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        .menu-button:hover,
+        .menu-button:focus {
+            opacity: 0.85;
+            transform: translateY(-1px);
+        }
+
+        .secondary-button {
+            background: transparent;
+            color: inherit;
+            border: 1px solid var(--tg-theme-button-color, #2aabee);
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+
+        .secondary-button:hover,
+        .secondary-button:focus {
+            background: var(--tg-theme-button-color, #2aabee);
+            color: var(--tg-theme-button-text-color, #ffffff);
+        }
+
+        button:focus-visible,
+        select:focus-visible {
+            outline: 2px solid var(--tg-theme-button-color, #2aabee);
+            outline-offset: 2px;
+        }
+
+        .stats {
+            background-color: var(--tg-theme-secondary-bg-color, rgba(255, 255, 255, 0.05));
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 12px 0;
+            font-size: 16px;
+        }
+
+        .stat-item strong {
+            font-size: 20px;
+        }
+
+        .page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+
+        .page-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .page-actions select {
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: var(--tg-theme-secondary-bg-color, rgba(255, 255, 255, 0.05));
+            color: inherit;
+            font-size: 14px;
+        }
+
+        .page {
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        .back-button {
+            background-color: var(--tg-theme-secondary-bg-color, rgba(255, 255, 255, 0.05));
+            color: var(--tg-theme-text-color, #ffffff);
+            border: 1px solid var(--tg-theme-button-color, #2aabee);
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 18px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: var(--tg-theme-hint-color, rgba(255, 255, 255, 0.6));
+        }
+
+        .error {
+            text-align: left;
+            padding: 16px;
+            color: #ff7676;
+            background-color: rgba(255, 118, 118, 0.12);
+            border-radius: 10px;
+            margin: 12px 0;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .task-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .task-item {
+            background-color: var(--tg-theme-secondary-bg-color, rgba(255, 255, 255, 0.05));
+            padding: 16px;
+            border-radius: 12px;
+            border-left: 4px solid var(--tg-theme-button-color, #2aabee);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .task-title {
+            font-weight: 600;
+            font-size: 16px;
+            margin: 0;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .task-description {
+            margin: 12px 0;
+            font-size: 14px;
+            color: var(--tg-theme-hint-color, rgba(255, 255, 255, 0.7));
+            line-height: 1.5;
+        }
+
+        .task-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            font-size: 12px;
+            color: var(--tg-theme-hint-color, rgba(255, 255, 255, 0.7));
+            flex-wrap: wrap;
+        }
+
+        .task-meta span {
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .task-deadline {
+            font-weight: 500;
+        }
+
+        .deadline-overdue {
+            color: #ff7676;
+        }
+
+        .task-id {
+            opacity: 0.8;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .status-badge.status-new {
+            background: rgba(80, 168, 235, 0.25);
+        }
+
+        .status-badge.status-pending {
+            background: rgba(255, 195, 0, 0.25);
+        }
+
+        .status-badge.status-in-progress {
+            background: rgba(0, 184, 212, 0.25);
+        }
+
+        .status-badge.status-review {
+            background: rgba(156, 39, 176, 0.25);
+        }
+
+        .status-badge.status-completed {
+            background: rgba(76, 175, 80, 0.35);
+        }
+
+        .status-badge.status-postponed {
+            background: rgba(96, 125, 139, 0.3);
+        }
+
+        .status-badge.status-declined {
+            background: rgba(244, 67, 54, 0.35);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 24px;
+            color: var(--tg-theme-hint-color, rgba(255, 255, 255, 0.6));
+            border: 1px dashed rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+        }
+
+        .cards-grid {
+            display: grid;
+            gap: 14px;
+            margin: 20px 0;
+        }
+
+        .card {
+            background-color: var(--tg-theme-secondary-bg-color, rgba(255, 255, 255, 0.05));
+            padding: 16px;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .card h4 {
+            margin: 0 0 6px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--tg-theme-hint-color, rgba(255, 255, 255, 0.7));
+        }
+
+        .card strong {
+            display: block;
+            font-size: 24px;
+            margin-bottom: 4px;
+        }
+
+        .card span {
+            font-size: 12px;
+            color: var(--tg-theme-hint-color, rgba(255, 255, 255, 0.6));
+        }
+
+        .analytics-details h3 {
+            font-size: 16px;
+            margin: 18px 0 10px;
+        }
+
+        .analytics-details ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: grid;
+            gap: 8px;
+        }
+
+        .analytics-details li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--tg-theme-secondary-bg-color, rgba(255, 255, 255, 0.05));
+            padding: 10px 14px;
+            border-radius: 10px;
+        }
+
+        .analytics-details li span:last-child {
+            font-weight: 600;
+        }
+
+        .team-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: grid;
+            gap: 12px;
+        }
+
+        .team-member {
+            background-color: var(--tg-theme-secondary-bg-color, rgba(255, 255, 255, 0.05));
+            padding: 16px;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .team-member h3 {
+            margin: 0 0 6px;
+            font-size: 16px;
+        }
+
+        .team-role {
+            margin: 0 0 6px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .team-focus {
+            margin: 0 0 10px;
+            font-size: 13px;
+            color: var(--tg-theme-hint-color, rgba(255, 255, 255, 0.7));
+        }
+
+        .team-meta span {
+            display: block;
+            font-size: 13px;
+            color: var(--tg-theme-hint-color, rgba(255, 255, 255, 0.7));
+        }
+
+        .info-block {
+            background-color: var(--tg-theme-secondary-bg-color, rgba(255, 255, 255, 0.05));
+            padding: 18px;
+            border-radius: 12px;
+            margin-bottom: 18px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .info-block h3 {
+            margin: 0 0 10px;
+            font-size: 16px;
+        }
+
+        .info-block p {
+            margin: 0 0 10px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .info-block ol {
+            margin: 0 0 10px 16px;
+            padding: 0;
+            font-size: 14px;
+        }
+
+        .info-block li {
+            margin-bottom: 6px;
+        }
+
+        .config-snippet {
+            background-color: rgba(0, 0, 0, 0.2);
+            padding: 12px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 13px;
+        }
+
+        @media (min-width: 480px) {
+            .cards-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="container">
+        <section id="dashboard" class="page active">
+            <div class="header">
+                <h1>Панель управления</h1>
+                <p id="welcome">Добро пожаловать!</p>
+            </div>
+
+            <div class="stats">
+                <div class="page-header">
+                    <h3>Статистика сегодня</h3>
+                    <button class="secondary-button" id="refreshDashboard">Обновить</button>
+                </div>
+                <div id="statsError" class="error hidden"></div>
+                <div class="stat-item">
+                    <span>Активные задачи:</span>
+                    <strong id="activeTasks">-</strong>
+                </div>
+                <div class="stat-item">
+                    <span>Выполнено сегодня:</span>
+                    <strong id="completedTasks">-</strong>
+                </div>
+                <div class="stat-item">
+                    <span>Просрочено:</span>
+                    <strong id="overdueTasks">-</strong>
+                </div>
+                <p class="hint" id="statsUpdatedAt">Обновлено: —</p>
+            </div>
+
+            <p class="hint hidden" id="demoNotice">Сейчас включён режим предпросмотра — данные берутся из DEMO_TASKS и не обращаются к Битрикс24.</p>
+
+            <nav class="menu">
+                <button class="menu-button" data-page-target="tasks">📋 Текущие задачи</button>
+                <button class="menu-button" data-page-target="analytics">📊 Аналитика</button>
+                <button class="menu-button" data-page-target="team">👥 Команда</button>
+                <button class="menu-button" data-page-target="settings">⚙️ Настройки</button>
+            </nav>
+        </section>
+
+        <section id="tasks" class="page">
+            <button class="back-button" data-action="back">← Назад</button>
+            <div class="page-header">
+                <h2>Мои задачи</h2>
+                <div class="page-actions">
+                    <select id="taskStatusFilter">
+                        <option value="active">Активные</option>
+                        <option value="overdue">Просроченные</option>
+                        <option value="completed">Завершённые</option>
+                        <option value="all">Все</option>
+                    </select>
+                    <button class="secondary-button" id="refreshTasks">Обновить</button>
+                </div>
+            </div>
+            <p class="hint">Используйте фильтр, чтобы посмотреть нужный набор задач.</p>
+            <div id="tasksError" class="error hidden"></div>
+            <div id="tasksContent" class="task-list">
+                <div class="loading">Загрузка задач...</div>
+            </div>
+            <p class="hint" id="tasksUpdatedAt">Обновлено: —</p>
+        </section>
+
+        <section id="analytics" class="page">
+            <button class="back-button" data-action="back">← Назад</button>
+            <div class="page-header">
+                <h2>Аналитика</h2>
+                <button class="secondary-button" id="refreshAnalytics">Обновить</button>
+            </div>
+            <p class="hint">Раздел показывает сводку по статусам и приоритетам задач.</p>
+            <div id="analyticsError" class="error hidden"></div>
+            <div id="analyticsContent">
+                <div class="loading">Считаем показатели...</div>
+            </div>
+            <p class="hint" id="analyticsUpdatedAt">Обновлено: —</p>
+        </section>
+
+        <section id="team" class="page">
+            <button class="back-button" data-action="back">← Назад</button>
+            <div class="page-header">
+                <h2>Команда</h2>
+            </div>
+            <p class="hint">Добавьте сюда ключевых сотрудников, чтобы коллеги быстро находили контакты.</p>
+            <div id="teamContent">
+                <div class="loading">Загружаем команду...</div>
+            </div>
+        </section>
+
+        <section id="settings" class="page">
+            <button class="back-button" data-action="back">← Назад</button>
+            <div class="page-header">
+                <h2>Настройки и подсказки</h2>
+            </div>
+
+            <div class="info-block">
+                <h3>Как подключить Битрикс24</h3>
+                <ol>
+                    <li>Создайте входящий вебхук в разделе «Приложения» вашего портала.</li>
+                    <li>Скопируйте ссылку вида <code>https://example.bitrix24.ru/rest/ID/ключ/</code> и вставьте её в <code>CONFIG.BITRIX_WEBHOOK</code>.</li>
+                    <li>Убедитесь, что у вебхука есть права на работу с задачами и пользователями.</li>
+                </ol>
+            </div>
+
+            <div class="info-block">
+                <h3>Связка Telegram ↔ Bitrix24</h3>
+                <p>Добавьте соответствия в объект <code>USER_MAPPING</code>, где ключ — это Telegram ID сотрудника, а значение — его ID в Битрикс24.</p>
+                <pre class="config-snippet"><code>USER_MAPPING: {
+    '721249582': '13',
+    '123456789': '1'
+}</code></pre>
+                <p class="hint">Определить ID пользователя в Telegram можно через @userinfobot.</p>
+            </div>
+
+            <div class="info-block">
+                <h3>Режим предпросмотра</h3>
+                <p>Если вы запускаете приложение вне Telegram или ещё не настроили интеграцию, включите <code>CONFIG.DEMO_MODE = true</code>. Приложение подставит демо-данные из <code>DEMO_TASKS</code>, чтобы вы могли тестировать интерфейс.</p>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const CONFIG = {
+            BITRIX_WEBHOOK: 'https://mpb.bitrix24.kz/rest/13/f92fhs0h39vmg991/',
+            USER_MAPPING: {
+                '721249582': '13'
+            },
+            TEAM_MEMBERS: [
+                {
+                    name: 'Асем Айдарова',
+                    role: 'Руководитель маркетинговых проектов',
+                    telegram: '@asem_marketing',
+                    phone: '+7 777 000 0000',
+                    focus: 'Стратегия продвижения и управление проектами'
+                },
+                {
+                    name: 'Ерлан Каирбеков',
+                    role: 'Таргетолог',
+                    telegram: '@erlan_ads',
+                    phone: '+7 702 000 0000',
+                    focus: 'Запуск и оптимизация рекламных кампаний'
+                },
+                {
+                    name: 'Мадина Садыкова',
+                    role: 'Контент-маркетолог',
+                    telegram: '@madina_content',
+                    phone: '+7 701 000 0000',
+                    focus: 'Контент-планирование и копирайтинг'
+                }
+            ],
+            DEMO_MODE: false,
+            DEMO_TASKS: [
+                {
+                    ID: '101',
+                    TITLE: 'Согласовать контент-план на неделю',
+                    DESCRIPTION: 'Подготовить и согласовать темы постов для Instagram и TikTok.',
+                    STATUS: '3',
+                    DEADLINE: '2024-06-05T18:00:00+03:00',
+                    PRIORITY: '2',
+                    CREATED_BY: '13',
+                    CREATED_DATE: '2024-05-30T09:00:00+03:00'
+                },
+                {
+                    ID: '102',
+                    TITLE: 'Запустить рекламную кампанию в Meta',
+                    DESCRIPTION: 'Настроить аудитории и проверить пиксель. Подготовить отчёт о первых результатах.',
+                    STATUS: '2',
+                    DEADLINE: '2024-06-03T12:00:00+03:00',
+                    PRIORITY: '1',
+                    CREATED_BY: '13',
+                    CREATED_DATE: '2024-05-29T11:30:00+03:00'
+                },
+                {
+                    ID: '103',
+                    TITLE: 'Подготовить отчёт по лидам за месяц',
+                    DESCRIPTION: 'Собрать статистику из CRM и выгрузить презентацию для клиента.',
+                    STATUS: '5',
+                    DEADLINE: '2024-05-31T19:00:00+03:00',
+                    CLOSED_DATE: '2024-05-31T17:45:00+03:00',
+                    PRIORITY: '0',
+                    CREATED_BY: '13',
+                    CREATED_DATE: '2024-05-27T10:15:00+03:00'
+                }
+            ]
+        };
+
+        const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+
+        if (tg) {
+            tg.ready();
+            tg.expand();
+        }
+
+        const environment = {
+            isTelegram: Boolean(tg && tg.initDataUnsafe && tg.initDataUnsafe.user),
+            isDemoMode: Boolean(CONFIG.DEMO_MODE),
+            useProxyOnly: false
+        };
+
+        if (!environment.isTelegram && !environment.isDemoMode && CONFIG.DEMO_TASKS && CONFIG.DEMO_TASKS.length) {
+            environment.isDemoMode = true;
+        }
+
+        const hasBackButton = Boolean(tg && tg.BackButton);
+
+        const state = {
+            tasks: [],
+            tasksLoadedAt: null
+        };
+
+        let currentUser = null;
+        let bitrixUserId = null;
+
+        const welcomeEl = document.getElementById('welcome');
+        const demoNoticeEl = document.getElementById('demoNotice');
+        const statsErrorEl = document.getElementById('statsError');
+        const tasksErrorEl = document.getElementById('tasksError');
+        const analyticsErrorEl = document.getElementById('analyticsError');
+        const statsUpdatedAtEl = document.getElementById('statsUpdatedAt');
+        const tasksUpdatedAtEl = document.getElementById('tasksUpdatedAt');
+        const analyticsUpdatedAtEl = document.getElementById('analyticsUpdatedAt');
+
+        const pageLoaders = {
+            dashboard: () => loadDashboardStats(),
+            tasks: () => loadUserTasks(),
+            analytics: () => loadAnalytics(),
+            team: () => loadTeam()
+        };
+
+        if (hasBackButton) {
+            tg.BackButton.onClick(() => {
+                const activePage = document.querySelector('.page.active');
+                if (!activePage || activePage.id === 'dashboard') {
+                    if (typeof tg.close === 'function') {
+                        tg.close();
+                    }
+                } else {
+                    showDashboard();
+                }
+            });
+        }
+
+        initializeApp();
+
+        function initializeApp() {
+            setupNavigation();
+            setupEventHandlers();
+            detectUser();
+            applyEnvironmentState();
+
+            if (environment.isDemoMode || bitrixUserId) {
+                showDashboard();
+            } else {
+                showPage('dashboard');
+                showInlineError(statsErrorEl, 'Не найдено соответствие Telegram ID. Добавьте пользователя в USER_MAPPING.');
+            }
+        }
+
+        function setupNavigation() {
+            document.querySelectorAll('[data-page-target]').forEach(button => {
+                button.addEventListener('click', () => showPage(button.dataset.pageTarget));
+            });
+
+            document.querySelectorAll('[data-action="back"]').forEach(button => {
+                button.addEventListener('click', showDashboard);
+            });
+        }
+
+        function setupEventHandlers() {
+            const dashboardButton = document.getElementById('refreshDashboard');
+            if (dashboardButton) {
+                dashboardButton.addEventListener('click', () => loadDashboardStats({ force: true }));
+            }
+
+            const tasksButton = document.getElementById('refreshTasks');
+            if (tasksButton) {
+                tasksButton.addEventListener('click', () => loadUserTasks({ force: true }));
+            }
+
+            const analyticsButton = document.getElementById('refreshAnalytics');
+            if (analyticsButton) {
+                analyticsButton.addEventListener('click', () => loadAnalytics({ force: true }));
+            }
+
+            const filterSelect = document.getElementById('taskStatusFilter');
+            if (filterSelect) {
+                filterSelect.addEventListener('change', event => {
+                    loadUserTasks({ filter: event.target.value });
+                });
+            }
+        }
+
+        function detectUser() {
+            if (environment.isTelegram && tg && tg.initDataUnsafe) {
+                currentUser = tg.initDataUnsafe.user;
+                if (currentUser && welcomeEl) {
+                    welcomeEl.textContent = `Добро пожаловать, ${currentUser.first_name}!`;
+                }
+                const mappedId = currentUser ? CONFIG.USER_MAPPING[currentUser.id.toString()] : null;
+                if (mappedId) {
+                    bitrixUserId = mappedId;
+                } else if (!environment.isDemoMode) {
+                    console.warn('Пользователь не найден в USER_MAPPING:', currentUser ? currentUser.id : 'unknown');
+                }
+            } else {
+                currentUser = { id: 'demo', first_name: 'Гость' };
+                if (welcomeEl) {
+                    welcomeEl.textContent = 'Режим предпросмотра активен';
+                }
+                if (!environment.isDemoMode && CONFIG.DEMO_TASKS && CONFIG.DEMO_TASKS.length) {
+                    environment.isDemoMode = true;
+                }
+                if (!bitrixUserId) {
+                    const mappingValues = Object.values(CONFIG.USER_MAPPING || {});
+                    if (mappingValues.length > 0) {
+                        bitrixUserId = mappingValues[0];
+                    }
+                }
+            }
+
+            if (environment.isDemoMode && CONFIG.DEMO_TASKS) {
+                state.tasks = CONFIG.DEMO_TASKS.map(task => ({ ...task }));
+                state.tasksLoadedAt = new Date();
+            }
+        }
+
+        function applyEnvironmentState() {
+            document.body.classList.toggle('demo-mode', environment.isDemoMode);
+            toggleHidden(demoNoticeEl, !environment.isDemoMode);
+        }
+
+        function showDashboard() {
+            showPage('dashboard');
+        }
+
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(page => {
+                page.classList.remove('active');
+            });
+
+            const page = document.getElementById(pageId);
+            if (page) {
+                page.classList.add('active');
+            }
+
+            updateBackButton(pageId);
+
+            if (pageLoaders[pageId]) {
+                pageLoaders[pageId]();
+            }
+        }
+
+        function updateBackButton(pageId) {
+            if (!hasBackButton) {
+                return;
+            }
+
+            if (pageId === 'dashboard') {
+                tg.BackButton.hide();
+            } else {
+                tg.BackButton.show();
+            }
+        }
+
+        function toggleHidden(element, hidden) {
+            if (!element) return;
+            element.classList.toggle('hidden', hidden);
+        }
+
+        function showInlineError(element, message) {
+            if (!element) return;
+            element.textContent = message;
+            toggleHidden(element, false);
+        }
+
+        function clearInlineError(element) {
+            if (!element) return;
+            element.textContent = '';
+            toggleHidden(element, true);
+        }
+
+        function updateTimestamp(element, date) {
+            if (!element) return;
+            if (!date) {
+                element.textContent = 'Обновлено: —';
+                return;
+            }
+            element.textContent = `Обновлено: ${formatDateTime(date)}`;
+        }
+
+        function parseDate(value) {
+            if (!value) return null;
+            const date = new Date(value);
+            return Number.isNaN(date.getTime()) ? null : date;
+        }
+
+        function formatDate(date) {
+            try {
+                return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: 'short' }).format(date);
+            } catch (error) {
+                return date.toLocaleDateString('ru-RU');
+            }
+        }
+
+        function formatDateTime(date) {
+            try {
+                return new Intl.DateTimeFormat('ru-RU', {
+                    day: '2-digit',
+                    month: 'long',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                }).format(date);
+            } catch (error) {
+                return date.toLocaleString('ru-RU');
+            }
+        }
+
+        function percent(part, total) {
+            if (!total) return 0;
+            return Math.round((part / total) * 100);
+        }
+
+        function escapeHTML(value) {
+            const div = document.createElement('div');
+            div.textContent = value ?? '';
+            return div.innerHTML;
+        }
+
+        function escapeAttribute(value) {
+            return (value ?? '').replace(/"/g, '&quot;');
+        }
+
+        function getPlainText(value) {
+            if (!value) return '';
+            const temp = document.createElement('div');
+            temp.innerHTML = value;
+            return temp.textContent || temp.innerText || '';
+        }
+
+        function truncate(value, limit = 220) {
+            if (!value) return '';
+            return value.length > limit ? `${value.slice(0, limit).trim()}…` : value;
+        }
+
+        function getStatusCode(task) {
+            const status = Number.parseInt(task.STATUS, 10);
+            return Number.isNaN(status) ? 0 : status;
+        }
+
+        function getTaskStatusText(status) {
+            const map = {
+                '1': 'Новая',
+                '2': 'Ожидает выполнения',
+                '3': 'Выполняется',
+                '4': 'Ожидает контроля',
+                '5': 'Завершена',
+                '6': 'Отложена',
+                '7': 'Отклонена'
+            };
+            return map[status?.toString()] || 'Неизвестно';
+        }
+
+        function getTaskStatusClass(status) {
+            const code = Number.parseInt(status, 10);
+            switch (code) {
+                case 5:
+                    return 'completed';
+                case 4:
+                    return 'review';
+                case 3:
+                    return 'in-progress';
+                case 6:
+                    return 'postponed';
+                case 7:
+                    return 'declined';
+                case 2:
+                    return 'pending';
+                default:
+                    return 'new';
+            }
+        }
+
+        function getPriorityBadge(priority) {
+            if (priority === '2') {
+                return '🔥 Высокий приоритет';
+            }
+            if (priority === '1') {
+                return '⚡ Средний приоритет';
+            }
+            return '';
+        }
+
+        function getTaskDeadline(task) {
+            const deadline = parseDate(task.DEADLINE);
+            if (!deadline) {
+                return { text: 'Срок не указан', overdue: false };
+            }
+            const now = new Date();
+            return {
+                text: `Срок: ${formatDate(deadline)}`,
+                overdue: getStatusCode(task) < 5 && deadline < now
+            };
+        }
+
+        function renderTask(task) {
+            const title = escapeHTML(task.TITLE || 'Без названия');
+            const description = escapeHTML(truncate(getPlainText(task.DESCRIPTION) || 'Описание отсутствует'));
+            const priorityLabel = getPriorityBadge(task.PRIORITY);
+            const statusClass = getTaskStatusClass(task.STATUS);
+            const statusText = getTaskStatusText(task.STATUS);
+            const deadline = getTaskDeadline(task);
+
+            return `
+                <article class="task-item">
+                    <div class="task-header">
+                        <h3 class="task-title">${title}</h3>
+                        <span class="status-badge status-${statusClass}">${statusText}</span>
+                    </div>
+                    ${priorityLabel ? `<span class="badge">${priorityLabel}</span>` : ''}
+                    <p class="task-description">${description}</p>
+                    <div class="task-meta">
+                        <span class="task-deadline${deadline.overdue ? ' deadline-overdue' : ''}">${escapeHTML(deadline.text)}</span>
+                        <span class="task-id">ID: ${escapeHTML(task.ID)}</span>
+                    </div>
+                </article>
+            `;
+        }
+
+        function isTaskOverdue(task, now = new Date()) {
+            const status = getStatusCode(task);
+            if (status >= 5) return false;
+            const deadline = parseDate(task.DEADLINE);
+            return deadline ? deadline < now : false;
+        }
+
+        function isTaskCompletedToday(task, todayStart, tomorrowStart) {
+            if (getStatusCode(task) !== 5) {
+                return false;
+            }
+            const closedDate = parseDate(task.CLOSED_DATE);
+            if (closedDate) {
+                return closedDate >= todayStart && closedDate < tomorrowStart;
+            }
+            const createdDate = parseDate(task.CREATED_DATE);
+            return createdDate ? createdDate >= todayStart && createdDate < tomorrowStart : false;
+        }
+
+        function normalizeTaskListResponse(payload) {
+            if (!payload) {
+                return [];
+            }
+
+            if (Array.isArray(payload)) {
+                return payload
+                    .map(item => {
+                        if (item && typeof item === 'object' && 'task' in item) {
+                            return item.task;
+                        }
+                        return item;
+                    })
+                    .filter(item => item && typeof item === 'object');
+            }
+
+            if (typeof payload === 'object') {
+                if (Array.isArray(payload.tasks)) {
+                    return normalizeTaskListResponse(payload.tasks);
+                }
+
+                if (payload.tasks && typeof payload.tasks === 'object') {
+                    return normalizeTaskListResponse(Object.values(payload.tasks));
+                }
+
+                if (Array.isArray(payload.result)) {
+                    return normalizeTaskListResponse(payload.result);
+                }
+
+                if (payload.result && typeof payload.result === 'object') {
+                    return normalizeTaskListResponse(payload.result);
+                }
+
+                if (Array.isArray(payload.list)) {
+                    return normalizeTaskListResponse(payload.list);
+                }
+
+                if (payload.list && typeof payload.list === 'object') {
+                    return normalizeTaskListResponse(Object.values(payload.list));
+                }
+
+                if (Array.isArray(payload.items)) {
+                    return normalizeTaskListResponse(payload.items);
+                }
+
+                if (payload.items && typeof payload.items === 'object') {
+                    return normalizeTaskListResponse(Object.values(payload.items));
+                }
+
+                if (Array.isArray(payload.data)) {
+                    return normalizeTaskListResponse(payload.data);
+                }
+
+                if (payload.data && typeof payload.data === 'object') {
+                    return normalizeTaskListResponse(payload.data);
+                }
+            }
+
+            return [];
+        }
+
+        async function fetchTasks({ force = false } = {}) {
+            if (environment.isDemoMode) {
+                if (!state.tasks.length) {
+                    state.tasks = (CONFIG.DEMO_TASKS || []).map(task => ({ ...task }));
+                    state.tasksLoadedAt = new Date();
+                }
+                return state.tasks;
+            }
+
+            if (!bitrixUserId) {
+                throw new Error('Пользователь не найден в USER_MAPPING');
+            }
+
+            if (!state.tasks.length || force) {
+                const response = await callBitrixAPI('tasks.task.list', {
+                    filter: {
+                        'RESPONSIBLE_ID': bitrixUserId
+                    },
+                    select: [
+                        'ID',
+                        'TITLE',
+                        'DESCRIPTION',
+                        'STATUS',
+                        'DEADLINE',
+                        'PRIORITY',
+                        'CREATED_BY',
+                        'CREATED_DATE',
+                        'CLOSED_DATE'
+                    ],
+                    order: {
+                        'DEADLINE': 'ASC'
+                    }
+                });
+
+                const normalizedTasks = normalizeTaskListResponse(response);
+                state.tasks = normalizedTasks.map(task => ({ ...task }));
+                state.tasksLoadedAt = new Date();
+            }
+
+            return state.tasks;
+        }
+
+        function applyTaskFilter(tasks, filterType) {
+            const now = new Date();
+            switch (filterType) {
+                case 'completed':
+                    return tasks.filter(task => getStatusCode(task) === 5);
+                case 'overdue':
+                    return tasks.filter(task => isTaskOverdue(task, now));
+                case 'all':
+                    return tasks;
+                case 'active':
+                default:
+                    return tasks.filter(task => getStatusCode(task) < 5);
+            }
+        }
+
+        function sortTasks(tasks, filterType) {
+            const sorted = [...tasks];
+            if (filterType === 'completed') {
+                sorted.sort((a, b) => {
+                    const aDate = parseDate(a.CLOSED_DATE) || parseDate(a.DEADLINE) || parseDate(a.CREATED_DATE) || new Date(0);
+                    const bDate = parseDate(b.CLOSED_DATE) || parseDate(b.DEADLINE) || parseDate(b.CREATED_DATE) || new Date(0);
+                    return bDate - aDate;
+                });
+            } else {
+                sorted.sort((a, b) => {
+                    const aDate = parseDate(a.DEADLINE) || parseDate(a.CREATED_DATE) || new Date(8640000000000000);
+                    const bDate = parseDate(b.DEADLINE) || parseDate(b.CREATED_DATE) || new Date(8640000000000000);
+                    return aDate - bDate;
+                });
+            }
+            return sorted;
+        }
+
+        function calculateDashboardStats(tasks) {
+            const todayStart = new Date();
+            todayStart.setHours(0, 0, 0, 0);
+            const tomorrowStart = new Date(todayStart);
+            tomorrowStart.setDate(todayStart.getDate() + 1);
+
+            return tasks.reduce((acc, task) => {
+                const status = getStatusCode(task);
+                if (status < 5) {
+                    acc.active += 1;
+                    if (isTaskOverdue(task)) {
+                        acc.overdue += 1;
+                    }
+                }
+                if (isTaskCompletedToday(task, todayStart, tomorrowStart)) {
+                    acc.completedToday += 1;
+                }
+                return acc;
+            }, { active: 0, completedToday: 0, overdue: 0 });
+        }
+
+        async function loadDashboardStats({ force = false } = {}) {
+            clearInlineError(statsErrorEl);
+
+            try {
+                const tasks = await fetchTasks({ force });
+                const stats = calculateDashboardStats(tasks);
+
+                document.getElementById('activeTasks').textContent = stats.active;
+                document.getElementById('completedTasks').textContent = stats.completedToday;
+                document.getElementById('overdueTasks').textContent = stats.overdue;
+
+                updateTimestamp(statsUpdatedAtEl, state.tasksLoadedAt);
+            } catch (error) {
+                console.error('Ошибка загрузки статистики:', error);
+                document.getElementById('activeTasks').textContent = '—';
+                document.getElementById('completedTasks').textContent = '—';
+                document.getElementById('overdueTasks').textContent = '—';
+                showInlineError(statsErrorEl, `Не удалось получить статистику: ${error.message}`);
+                updateTimestamp(statsUpdatedAtEl, null);
+            }
+        }
+
+        async function loadUserTasks({ filter, force = false } = {}) {
+            const container = document.getElementById('tasksContent');
+            if (!container) return;
+
+            const filterSelect = document.getElementById('taskStatusFilter');
+            const selectedFilter = filter || (filterSelect ? filterSelect.value : 'active');
+
+            if (filterSelect && filterSelect.value !== selectedFilter) {
+                filterSelect.value = selectedFilter;
+            }
+
+            container.innerHTML = '<div class="loading">Загрузка задач...</div>';
+            clearInlineError(tasksErrorEl);
+
+            try {
+                const tasks = await fetchTasks({ force });
+                const filtered = applyTaskFilter(tasks, selectedFilter);
+
+                if (!filtered.length) {
+                    container.innerHTML = '<div class="empty-state">Задачи с выбранным фильтром не найдены.</div>';
+                } else {
+                    const sortedTasks = sortTasks(filtered, selectedFilter);
+                    container.innerHTML = sortedTasks.map(renderTask).join('');
+                }
+
+                updateTimestamp(tasksUpdatedAtEl, state.tasksLoadedAt);
+            } catch (error) {
+                console.error('Ошибка загрузки задач:', error);
+                container.innerHTML = '';
+                showInlineError(tasksErrorEl, `Не удалось загрузить задачи: ${error.message}`);
+                updateTimestamp(tasksUpdatedAtEl, null);
+            }
+        }
+
+        function buildAnalytics(tasks) {
+            const summary = {
+                total: tasks.length,
+                active: 0,
+                completed: 0,
+                overdue: 0,
+                highPriority: 0,
+                mediumPriority: 0,
+                lowPriority: 0,
+                statuses: {}
+            };
+
+            const now = new Date();
+
+            tasks.forEach(task => {
+                const statusCode = getStatusCode(task);
+                const key = statusCode.toString();
+                summary.statuses[key] = (summary.statuses[key] || 0) + 1;
+
+                if (statusCode < 5) {
+                    summary.active += 1;
+                }
+                if (statusCode === 5) {
+                    summary.completed += 1;
+                }
+                if (isTaskOverdue(task, now)) {
+                    summary.overdue += 1;
+                }
+
+                if (task.PRIORITY === '2') {
+                    summary.highPriority += 1;
+                } else if (task.PRIORITY === '1') {
+                    summary.mediumPriority += 1;
+                } else {
+                    summary.lowPriority += 1;
+                }
+            });
+
+            return summary;
+        }
+
+        function renderAnalytics(summary) {
+            const statusItems = Object.entries(summary.statuses)
+                .sort((a, b) => Number.parseInt(a[0], 10) - Number.parseInt(b[0], 10))
+                .map(([status, count]) => {
+                    const label = getTaskStatusText(status);
+                    return `<li><span>${escapeHTML(label)}</span><span>${count} (${percent(count, summary.total)}%)</span></li>`;
+                })
+                .join('');
+
+            const priorityItems = [
+                { label: 'Высокий 🔥', value: summary.highPriority },
+                { label: 'Средний ⚡', value: summary.mediumPriority },
+                { label: 'Обычный', value: summary.lowPriority }
+            ].map(item => `<li><span>${item.label}</span><span>${item.value} (${percent(item.value, summary.total)}%)</span></li>`).join('');
+
+            return `
+                <div class="cards-grid">
+                    <div class="card">
+                        <h4>Всего задач</h4>
+                        <strong>${summary.total}</strong>
+                        <span>Включая активные и завершённые</span>
+                    </div>
+                    <div class="card">
+                        <h4>Активные</h4>
+                        <strong>${summary.active}</strong>
+                        <span>В работе прямо сейчас</span>
+                    </div>
+                    <div class="card">
+                        <h4>Завершённые</h4>
+                        <strong>${summary.completed}</strong>
+                        <span>Статус «Завершена»</span>
+                    </div>
+                    <div class="card">
+                        <h4>Просроченные</h4>
+                        <strong>${summary.overdue}</strong>
+                        <span>Срок уже наступил</span>
+                    </div>
+                </div>
+                <div class="analytics-details">
+                    <h3>Распределение по статусам</h3>
+                    <ul>${statusItems || '<li><span>Нет данных</span><span>—</span></li>'}</ul>
+                    <h3>По приоритетам</h3>
+                    <ul>${priorityItems}</ul>
+                </div>
+            `;
+        }
+
+        async function loadAnalytics({ force = false } = {}) {
+            const container = document.getElementById('analyticsContent');
+            if (!container) return;
+
+            container.innerHTML = '<div class="loading">Считаем показатели...</div>';
+            clearInlineError(analyticsErrorEl);
+
+            try {
+                const tasks = await fetchTasks({ force });
+                if (!tasks.length) {
+                    container.innerHTML = '<div class="empty-state">Недостаточно данных для аналитики.</div>';
+                    updateTimestamp(analyticsUpdatedAtEl, state.tasksLoadedAt);
+                    return;
+                }
+
+                const summary = buildAnalytics(tasks);
+                container.innerHTML = renderAnalytics(summary);
+                updateTimestamp(analyticsUpdatedAtEl, state.tasksLoadedAt);
+            } catch (error) {
+                console.error('Ошибка загрузки аналитики:', error);
+                container.innerHTML = '';
+                showInlineError(analyticsErrorEl, `Не удалось загрузить аналитику: ${error.message}`);
+                updateTimestamp(analyticsUpdatedAtEl, null);
+            }
+        }
+
+        function renderTeamMember(member) {
+            const name = escapeHTML(member.name || 'Без имени');
+            const role = escapeHTML(member.role || '');
+            const focus = escapeHTML(member.focus || '');
+            const contacts = [
+                member.telegram ? `Telegram: <a href="https://t.me/${escapeAttribute(member.telegram.replace('@', ''))}" target="_blank" rel="noopener">${escapeHTML(member.telegram)}</a>` : '',
+                member.phone ? `Телефон: <a href="tel:${escapeAttribute(member.phone)}">${escapeHTML(member.phone)}</a>` : '',
+                member.email ? `Email: <a href="mailto:${escapeAttribute(member.email)}">${escapeHTML(member.email)}</a>` : ''
+            ].filter(Boolean).map(item => `<span>${item}</span>`).join('');
+
+            return `
+                <li class="team-member">
+                    <h3>${name}</h3>
+                    ${role ? `<p class="team-role">${role}</p>` : ''}
+                    ${focus ? `<p class="team-focus">${focus}</p>` : ''}
+                    ${contacts ? `<div class="team-meta">${contacts}</div>` : ''}
+                </li>
+            `;
+        }
+
+        function loadTeam() {
+            const container = document.getElementById('teamContent');
+            if (!container) return;
+
+            const members = CONFIG.TEAM_MEMBERS || [];
+            if (!members.length) {
+                container.innerHTML = '<div class="empty-state">Добавьте сотрудников в CONFIG.TEAM_MEMBERS, чтобы отобразить команду.</div>';
+                return;
+            }
+
+            container.innerHTML = `<ul class="team-list">${members.map(renderTeamMember).join('')}</ul>`;
+        }
+
+        function shouldUseProxyForError(error) {
+            if (!error) {
+                return false;
+            }
+
+            if (error instanceof TypeError) {
+                return true;
+            }
+
+            const message = typeof error.message === 'string' ? error.message.toLowerCase() : '';
+            return message.includes('failed to fetch') || message.includes('networkerror') || message.includes('cors');
+        }
+
+        async function callBitrixAPI(method, params = {}) {
+            if (!CONFIG.BITRIX_WEBHOOK) {
+                throw new Error('BITRIX_WEBHOOK не задан');
+            }
+
+            const url = new URL(`${CONFIG.BITRIX_WEBHOOK}${method}.json`);
+
+            Object.keys(params).forEach(key => {
+                const value = params[key];
+                if (value === undefined || value === null) {
+                    return;
+                }
+
+                if (Array.isArray(value)) {
+                    value.forEach(item => {
+                        url.searchParams.append(`${key}[]`, item);
+                    });
+                } else if (typeof value === 'object') {
+                    Object.keys(value).forEach(subKey => {
+                        url.searchParams.append(`${key}[${subKey}]`, value[subKey]);
+                    });
+                } else {
+                    url.searchParams.append(key, value);
+                }
+            });
+
+            let directError = null;
+
+            if (!environment.useProxyOnly) {
+                try {
+                    const response = await fetch(url.toString(), {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    const data = await response.json();
+
+                    if (data.error) {
+                        throw new Error(data.error_description || data.error);
+                    }
+
+                    if (data.result === undefined) {
+                        console.warn('Bitrix direct request returned unexpected payload structure.', data);
+                        return data;
+                    }
+
+                    return data.result;
+                } catch (error) {
+                    if (!shouldUseProxyForError(error)) {
+                        throw error;
+                    }
+
+                    directError = error;
+                    environment.useProxyOnly = true;
+                    console.warn('Bitrix direct request failed, switching to proxy mode.', error);
+                }
+            }
+
+            const proxyResponse = await fetch('/api/bitrix', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    webhook: CONFIG.BITRIX_WEBHOOK,
+                    method,
+                    params
+                })
+            });
+
+            if (!proxyResponse.ok) {
+                const message = await proxyResponse.text();
+                const errorMessage = message ? ` ${message}` : '';
+                throw new Error(`Bitrix proxy error: ${proxyResponse.status}${errorMessage}`);
+            }
+
+            let proxyData;
+            try {
+                proxyData = await proxyResponse.json();
+            } catch (parseError) {
+                const fallbackMessage = directError && directError.message ? `; direct error: ${directError.message}` : '';
+                throw new Error(`Bitrix proxy parse error${fallbackMessage}`);
+            }
+
+            if (proxyData.error) {
+                throw new Error(proxyData.error_description || proxyData.error);
+            }
+
+            if (proxyData.result === undefined) {
+                console.warn('Bitrix proxy returned unexpected payload structure.', proxyData);
+                return proxyData;
+            }
+
+            return proxyData.result;
+        }
+    </script>
+</body>
+</html>
