@@ -30,7 +30,7 @@
 
         .header {
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 30px;
         }
 
         .header h1 {
@@ -39,7 +39,7 @@
         }
 
         .hint {
-            margin: 8px 0 8px;
+            margin: 8px 0 0;
             font-size: 13px;
             color: var(--tg-theme-hint-color, rgba(255, 255, 255, 0.6));
         }
@@ -436,6 +436,7 @@
             <div class="header">
                 <h1>Панель управления</h1>
                 <p id="welcome">Добро пожаловать!</p>
+                <p class="hint hidden" id="activeUserInfo"></p>
             </div>
 
             <div class="stats">
@@ -545,6 +546,15 @@
                 <h3>Режим предпросмотра</h3>
                 <p>Если вы запускаете приложение вне Telegram или ещё не настроили интеграцию, включите <code>CONFIG.DEMO_MODE = true</code>. Приложение подставит демо-данные из <code>DEMO_TASKS</code>, чтобы вы могли тестировать интерфейс.</p>
             </div>
+
+            <div class="info-block">
+                <h3>Тестирование с реальными данными</h3>
+                <p>Чтобы проверить подключение без Telegram, добавьте параметры в ссылку мини-приложения. Например:</p>
+                <pre class="config-snippet"><code>?telegram_id=721249582&amp;demo=0</code></pre>
+                <p class="hint">Доступны параметры <code>telegram_id</code>, <code>bitrix_user_id</code>, <code>demo</code> и <code>webhook</code>. Они помогут проверить другие аккаунты и вебхуки.</p>
+                <button class="secondary-button" id="testConnection">Проверить подключение к Bitrix24</button>
+                <p class="hint hidden" id="connectionResult"></p>
+            </div>
         </section>
     </main>
 
@@ -556,24 +566,24 @@
             },
             TEAM_MEMBERS: [
                 {
-                    name: 'Лупа',
+                    name: 'Асем Айдарова',
                     role: 'Руководитель маркетинговых проектов',
-                    telegram: '@lupa_marketing',
-                    phone: '+7 903 000 0000',
+                    telegram: '@asem_marketing',
+                    phone: '+7 777 000 0000',
                     focus: 'Стратегия продвижения и управление проектами'
                 },
                 {
-                    name: 'Пупа',
+                    name: 'Ерлан Каирбеков',
                     role: 'Таргетолог',
-                    telegram: '@pupa_ads',
-                    phone: '+7 902 000 0000',
+                    telegram: '@erlan_ads',
+                    phone: '+7 702 000 0000',
                     focus: 'Запуск и оптимизация рекламных кампаний'
                 },
                 {
-                    name: 'Ебн-бобн',
+                    name: 'Мадина Садыкова',
                     role: 'Контент-маркетолог',
-                    telegram: '@ebn_bobn',
-                    phone: '+7 901 000 0000',
+                    telegram: '@madina_content',
+                    phone: '+7 701 000 0000',
                     focus: 'Контент-планирование и копирайтинг'
                 }
             ],
@@ -613,6 +623,57 @@
             ]
         };
 
+        function ensureTrailingSlash(value) {
+            if (!value) {
+                return '';
+            }
+
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return '';
+            }
+
+            return trimmed.endsWith('/') ? trimmed : `${trimmed}/`;
+        }
+
+        const manualOverrides = (() => {
+            const params = new URLSearchParams(window.location.search);
+            const sanitize = value => (value ? value.trim() : '');
+            const sanitizeId = value => {
+                if (!value) return '';
+                return value.replace(/\s+/g, '').replace(/^@/, '');
+            };
+            const parseBoolean = value => {
+                if (value === null) return null;
+                const normalized = value.trim().toLowerCase();
+                if (!normalized) {
+                    return true;
+                }
+                return !['0', 'false', 'no', 'off'].includes(normalized);
+            };
+
+            return {
+                telegramId: sanitizeId(params.get('telegram_id') || params.get('tg')),
+                bitrixUserId: sanitizeId(params.get('bitrix_user_id') || params.get('bx')),
+                webhook: sanitize(params.get('webhook') || params.get('hook')),
+                demoMode: parseBoolean(params.get('demo')),
+                firstName: sanitize(params.get('name') || params.get('first_name')),
+                lastName: sanitize(params.get('last_name') || params.get('surname'))
+            };
+        })();
+
+        if (CONFIG.BITRIX_WEBHOOK) {
+            CONFIG.BITRIX_WEBHOOK = ensureTrailingSlash(CONFIG.BITRIX_WEBHOOK);
+        }
+
+        if (manualOverrides.webhook) {
+            CONFIG.BITRIX_WEBHOOK = ensureTrailingSlash(manualOverrides.webhook);
+        }
+
+        if (manualOverrides.demoMode !== null) {
+            CONFIG.DEMO_MODE = manualOverrides.demoMode;
+        }
+
         const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
 
         if (tg) {
@@ -620,13 +681,19 @@
             tg.expand();
         }
 
+        const hasTelegramContext = Boolean(tg && tg.initDataUnsafe && tg.initDataUnsafe.user);
+        const manualTelegramId = manualOverrides.telegramId;
+        const manualBitrixUserId = manualOverrides.bitrixUserId;
+
         const environment = {
-            isTelegram: Boolean(tg && tg.initDataUnsafe && tg.initDataUnsafe.user),
+            hasTelegramContext,
+            hasManualIdentity: Boolean(manualTelegramId || manualBitrixUserId),
+            isTelegram: hasTelegramContext || Boolean(manualTelegramId || manualBitrixUserId),
             isDemoMode: Boolean(CONFIG.DEMO_MODE),
-            useProxyOnly: false
+            isDemoForced: manualOverrides.demoMode !== null
         };
 
-        if (!environment.isTelegram && !environment.isDemoMode && CONFIG.DEMO_TASKS && CONFIG.DEMO_TASKS.length) {
+        if (!environment.isTelegram && !environment.isDemoMode && CONFIG.DEMO_TASKS && CONFIG.DEMO_TASKS.length && !environment.isDemoForced) {
             environment.isDemoMode = true;
         }
 
@@ -634,13 +701,22 @@
 
         const state = {
             tasks: [],
-            tasksLoadedAt: null
+            tasksLoadedAt: null,
+            tasksTotal: 0
+        };
+
+        const bitrixTransportState = {
+            preferProxy: false,
+            supportsProxy: typeof window !== 'undefined'
+                && window.location
+                && window.location.protocol !== 'file:'
         };
 
         let currentUser = null;
         let bitrixUserId = null;
 
         const welcomeEl = document.getElementById('welcome');
+        const activeUserInfoEl = document.getElementById('activeUserInfo');
         const demoNoticeEl = document.getElementById('demoNotice');
         const statsErrorEl = document.getElementById('statsError');
         const tasksErrorEl = document.getElementById('tasksError');
@@ -648,6 +724,7 @@
         const statsUpdatedAtEl = document.getElementById('statsUpdatedAt');
         const tasksUpdatedAtEl = document.getElementById('tasksUpdatedAt');
         const analyticsUpdatedAtEl = document.getElementById('analyticsUpdatedAt');
+        const connectionResultEl = document.getElementById('connectionResult');
 
         const pageLoaders = {
             dashboard: () => loadDashboardStats(),
@@ -717,10 +794,55 @@
                     loadUserTasks({ filter: event.target.value });
                 });
             }
+
+            const testConnectionButton = document.getElementById('testConnection');
+            if (testConnectionButton) {
+                testConnectionButton.addEventListener('click', () => {
+                    testBitrixConnection();
+                });
+            }
         }
 
         function detectUser() {
-            if (environment.isTelegram && tg && tg.initDataUnsafe) {
+            const hasManualOverrides = Boolean(manualTelegramId || manualBitrixUserId);
+
+            if (hasManualOverrides) {
+                const displayNameParts = [];
+                if (manualOverrides.firstName) {
+                    displayNameParts.push(manualOverrides.firstName);
+                }
+                if (manualOverrides.lastName) {
+                    displayNameParts.push(manualOverrides.lastName);
+                }
+
+                const displayName = displayNameParts.join(' ').trim() || 'Тестовый пользователь';
+                const fallbackFirstName = manualOverrides.firstName || displayName.split(' ')[0] || 'Тестовый пользователь';
+
+                currentUser = {
+                    id: manualTelegramId || 'manual',
+                    first_name: fallbackFirstName,
+                    last_name: manualOverrides.lastName || ''
+                };
+
+                if (welcomeEl) {
+                    welcomeEl.textContent = `Тестовый доступ: ${displayName}`;
+                }
+
+                if (manualTelegramId && manualBitrixUserId && (!CONFIG.USER_MAPPING || !CONFIG.USER_MAPPING[manualTelegramId])) {
+                    CONFIG.USER_MAPPING[manualTelegramId] = manualBitrixUserId;
+                }
+
+                const mappedId = (manualTelegramId && CONFIG.USER_MAPPING ? CONFIG.USER_MAPPING[manualTelegramId] : null) || manualBitrixUserId || null;
+                if (mappedId) {
+                    bitrixUserId = mappedId;
+                }
+
+                environment.isTelegram = true;
+
+                if (!environment.isDemoForced) {
+                    environment.isDemoMode = false;
+                }
+            } else if (environment.hasTelegramContext && tg && tg.initDataUnsafe) {
                 currentUser = tg.initDataUnsafe.user;
                 if (currentUser && welcomeEl) {
                     welcomeEl.textContent = `Добро пожаловать, ${currentUser.first_name}!`;
@@ -751,6 +873,8 @@
                 state.tasks = CONFIG.DEMO_TASKS.map(task => ({ ...task }));
                 state.tasksLoadedAt = new Date();
             }
+
+            updateActiveUserInfo();
         }
 
         function applyEnvironmentState() {
@@ -806,6 +930,32 @@
             if (!element) return;
             element.textContent = '';
             toggleHidden(element, true);
+        }
+
+        function updateActiveUserInfo() {
+            if (!activeUserInfoEl) {
+                return;
+            }
+
+            if (environment.isDemoMode) {
+                activeUserInfoEl.textContent = 'Демо-режим: отображаются тестовые данные.';
+                toggleHidden(activeUserInfoEl, false);
+                return;
+            }
+
+            if (!bitrixUserId) {
+                activeUserInfoEl.textContent = 'Bitrix24 ID не определён. Проверьте соответствие Telegram ↔ Bitrix24.';
+                toggleHidden(activeUserInfoEl, false);
+                return;
+            }
+
+            const telegramInfo = currentUser && currentUser.id && currentUser.id !== 'demo' && currentUser.id !== 'manual'
+                ? `Telegram ID: ${currentUser.id}`
+                : null;
+            const parts = [telegramInfo, `Bitrix24 ID: ${bitrixUserId}`].filter(Boolean);
+
+            activeUserInfoEl.textContent = `Текущий пользователь → ${parts.join(' · ')}`;
+            toggleHidden(activeUserInfoEl, false);
         }
 
         function updateTimestamp(element, date) {
@@ -869,6 +1019,47 @@
         function truncate(value, limit = 220) {
             if (!value) return '';
             return value.length > limit ? `${value.slice(0, limit).trim()}…` : value;
+        }
+
+        function buildBitrixParams(params = {}) {
+            const search = new URLSearchParams();
+            const stack = Object.keys(params || {}).map(key => ({
+                key,
+                value: params[key]
+            }));
+
+            while (stack.length) {
+                const { key, value } = stack.pop();
+                if (value === undefined || value === null) {
+                    continue;
+                }
+
+                if (Array.isArray(value)) {
+                    value.forEach(item => {
+                        search.append(`${key}[]`, item);
+                    });
+                    continue;
+                }
+
+                if (typeof value === 'object') {
+                    const entries = Object.keys(value);
+                    if (!entries.length) {
+                        continue;
+                    }
+
+                    entries.forEach(subKey => {
+                        stack.push({
+                            key: `${key}[${subKey}]`,
+                            value: value[subKey]
+                        });
+                    });
+                    continue;
+                }
+
+                search.append(key, value);
+            }
+
+            return search;
         }
 
         function getStatusCode(task) {
@@ -974,82 +1165,22 @@
             return createdDate ? createdDate >= todayStart && createdDate < tomorrowStart : false;
         }
 
-        function normalizeTaskListResponse(payload) {
-            if (!payload) {
-                return [];
-            }
-
-            if (Array.isArray(payload)) {
-                return payload
-                    .map(item => {
-                        if (item && typeof item === 'object' && 'task' in item) {
-                            return item.task;
-                        }
-                        return item;
-                    })
-                    .filter(item => item && typeof item === 'object');
-            }
-
-            if (typeof payload === 'object') {
-                if (Array.isArray(payload.tasks)) {
-                    return normalizeTaskListResponse(payload.tasks);
-                }
-
-                if (payload.tasks && typeof payload.tasks === 'object') {
-                    return normalizeTaskListResponse(Object.values(payload.tasks));
-                }
-
-                if (Array.isArray(payload.result)) {
-                    return normalizeTaskListResponse(payload.result);
-                }
-
-                if (payload.result && typeof payload.result === 'object') {
-                    return normalizeTaskListResponse(payload.result);
-                }
-
-                if (Array.isArray(payload.list)) {
-                    return normalizeTaskListResponse(payload.list);
-                }
-
-                if (payload.list && typeof payload.list === 'object') {
-                    return normalizeTaskListResponse(Object.values(payload.list));
-                }
-
-                if (Array.isArray(payload.items)) {
-                    return normalizeTaskListResponse(payload.items);
-                }
-
-                if (payload.items && typeof payload.items === 'object') {
-                    return normalizeTaskListResponse(Object.values(payload.items));
-                }
-
-                if (Array.isArray(payload.data)) {
-                    return normalizeTaskListResponse(payload.data);
-                }
-
-                if (payload.data && typeof payload.data === 'object') {
-                    return normalizeTaskListResponse(payload.data);
-                }
-            }
-
-            return [];
-        }
-
         async function fetchTasks({ force = false } = {}) {
             if (environment.isDemoMode) {
                 if (!state.tasks.length) {
                     state.tasks = (CONFIG.DEMO_TASKS || []).map(task => ({ ...task }));
                     state.tasksLoadedAt = new Date();
+                    state.tasksTotal = state.tasks.length;
                 }
                 return state.tasks;
             }
 
             if (!bitrixUserId) {
-                throw new Error('Пользователь не найден в USER_MAPPING');
+                throw new Error('Bitrix24 ID пользователя не определён. Проверьте USER_MAPPING или параметры запуска.');
             }
 
             if (!state.tasks.length || force) {
-                const response = await callBitrixAPI('tasks.task.list', {
+                const baseParams = {
                     filter: {
                         'RESPONSIBLE_ID': bitrixUserId
                     },
@@ -1066,12 +1197,33 @@
                     ],
                     order: {
                         'DEADLINE': 'ASC'
-                    }
-                });
+                    },
+                    start: 0
+                };
 
-                const normalizedTasks = normalizeTaskListResponse(response);
-                state.tasks = normalizedTasks.map(task => ({ ...task }));
+                const tasks = [];
+                const seenOffsets = new Set();
+                let next = 0;
+                let total = 0;
+
+                while (typeof next === 'number' && !seenOffsets.has(next) && tasks.length < 2000) {
+                    seenOffsets.add(next);
+
+                    const response = await callBitrixAPI('tasks.task.list', {
+                        ...baseParams,
+                        start: next
+                    });
+
+                    const batch = response.tasks || [];
+                    tasks.push(...batch);
+                    total = typeof response.total === 'number' ? response.total : total;
+
+                    next = typeof response.next === 'number' ? response.next : null;
+                }
+
+                state.tasks = tasks;
                 state.tasksLoadedAt = new Date();
+                state.tasksTotal = total || tasks.length;
             }
 
             return state.tasks;
@@ -1334,17 +1486,59 @@
             container.innerHTML = `<ul class="team-list">${members.map(renderTeamMember).join('')}</ul>`;
         }
 
-        function shouldUseProxyForError(error) {
-            if (!error) {
-                return false;
+        async function testBitrixConnection() {
+            if (!connectionResultEl) {
+                return;
             }
 
-            if (error instanceof TypeError) {
-                return true;
+            if (environment.isDemoMode) {
+                connectionResultEl.textContent = 'Включён демо-режим — реальные запросы к Bitrix24 отключены.';
+                toggleHidden(connectionResultEl, false);
+                return;
             }
 
-            const message = typeof error.message === 'string' ? error.message.toLowerCase() : '';
-            return message.includes('failed to fetch') || message.includes('networkerror') || message.includes('cors');
+            if (!CONFIG.BITRIX_WEBHOOK) {
+                connectionResultEl.textContent = 'Не задан адрес вебхука Bitrix24. Заполните CONFIG.BITRIX_WEBHOOK.';
+                toggleHidden(connectionResultEl, false);
+                return;
+            }
+
+            if (!bitrixUserId) {
+                connectionResultEl.textContent = 'Bitrix24 ID пользователя не найден. Проверьте соответствия Telegram ↔ Bitrix24.';
+                toggleHidden(connectionResultEl, false);
+                return;
+            }
+
+            connectionResultEl.textContent = 'Отправляем запрос к Bitrix24...';
+            toggleHidden(connectionResultEl, false);
+
+            try {
+                const response = await callBitrixAPI('tasks.task.list', {
+                    filter: {
+                        'RESPONSIBLE_ID': bitrixUserId
+                    },
+                    select: ['ID', 'TITLE', 'STATUS', 'DEADLINE'],
+                    order: { 'DEADLINE': 'ASC' },
+                    start: 0
+                });
+
+                const tasks = response.tasks || [];
+                const total = typeof response.total === 'number' ? response.total : tasks.length;
+
+                if (tasks.length) {
+                    const preview = tasks
+                        .slice(0, 3)
+                        .map(task => `#${escapeHTML(task.ID || '')} — ${escapeHTML(task.TITLE || 'Без названия')}`)
+                        .join('<br>');
+
+                    connectionResultEl.innerHTML = `Успешно: получено задач — ${total || tasks.length}.<br><span class="hint">Примеры:<br>${preview}</span>`;
+                } else {
+                    connectionResultEl.textContent = 'Подключение установлено, но задачи для указанного пользователя не найдены.';
+                }
+            } catch (error) {
+                console.error('Проверка подключения завершилась ошибкой:', error);
+                connectionResultEl.textContent = `Ошибка: ${error.message}`;
+            }
         }
 
         async function callBitrixAPI(method, params = {}) {
@@ -1352,101 +1546,162 @@
                 throw new Error('BITRIX_WEBHOOK не задан');
             }
 
-            const url = new URL(`${CONFIG.BITRIX_WEBHOOK}${method}.json`);
+            const webhook = ensureTrailingSlash(CONFIG.BITRIX_WEBHOOK);
+            const url = new URL(`${webhook}${method}.json`);
+            const query = buildBitrixParams(params);
+            const queryString = query.toString();
 
-            Object.keys(params).forEach(key => {
-                const value = params[key];
-                if (value === undefined || value === null) {
-                    return;
-                }
+            if (queryString) {
+                url.search = queryString;
+            }
 
-                if (Array.isArray(value)) {
-                    value.forEach(item => {
-                        url.searchParams.append(`${key}[]`, item);
-                    });
-                } else if (typeof value === 'object') {
-                    Object.keys(value).forEach(subKey => {
-                        url.searchParams.append(`${key}[${subKey}]`, value[subKey]);
-                    });
-                } else {
-                    url.searchParams.append(key, value);
-                }
-            });
+            let networkError = null;
 
-            let directError = null;
-
-            if (!environment.useProxyOnly) {
+            if (!bitrixTransportState.preferProxy) {
                 try {
-                    const response = await fetch(url.toString(), {
-                        method: 'GET',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        }
-                    });
-
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}`);
-                    }
-
-                    const data = await response.json();
-
-                    if (data.error) {
-                        throw new Error(data.error_description || data.error);
-                    }
-
-                    if (data.result === undefined) {
-                        console.warn('Bitrix direct request returned unexpected payload structure.', data);
-                        return data;
-                    }
-
-                    return data.result;
+                    return await performDirectBitrixRequest(url);
                 } catch (error) {
-                    if (!shouldUseProxyForError(error)) {
+                    if (error && error.isNetworkError) {
+                        networkError = error;
+                        bitrixTransportState.preferProxy = true;
+                        console.warn('Прямой запрос к Bitrix24 недоступен, переключаемся на прокси.', error);
+                    } else {
                         throw error;
                     }
-
-                    directError = error;
-                    environment.useProxyOnly = true;
-                    console.warn('Bitrix direct request failed, switching to proxy mode.', error);
                 }
             }
 
-            const proxyResponse = await fetch('/api/bitrix', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    webhook: CONFIG.BITRIX_WEBHOOK,
-                    method,
-                    params
-                })
-            });
+            if (!bitrixTransportState.supportsProxy) {
+                if (networkError) {
+                    throw networkError;
+                }
 
-            if (!proxyResponse.ok) {
-                const message = await proxyResponse.text();
-                const errorMessage = message ? ` ${message}` : '';
-                throw new Error(`Bitrix proxy error: ${proxyResponse.status}${errorMessage}`);
+                throw new Error('Невозможно выполнить запрос к Bitrix24: прямое соединение недоступно, а прокси нельзя использовать в текущем окружении.');
             }
 
-            let proxyData;
             try {
-                proxyData = await proxyResponse.json();
-            } catch (parseError) {
-                const fallbackMessage = directError && directError.message ? `; direct error: ${directError.message}` : '';
-                throw new Error(`Bitrix proxy parse error${fallbackMessage}`);
+                return await performProxyBitrixRequest({ webhook, method, params });
+            } catch (error) {
+                if (networkError) {
+                    error.message = `${error.message} (также прямой запрос завершился ошибкой: ${networkError.message})`;
+                }
+                throw error;
+            }
+        }
+
+        async function performDirectBitrixRequest(url) {
+            let response;
+            try {
+                response = await fetch(url.toString(), { method: 'GET' });
+            } catch (error) {
+                const networkError = new Error(`Не удалось выполнить прямой запрос к Bitrix24: ${error.message}`);
+                networkError.isNetworkError = true;
+                throw networkError;
             }
 
-            if (proxyData.error) {
-                throw new Error(proxyData.error_description || proxyData.error);
+            const raw = await response.text();
+
+            if (!response.ok) {
+                let message = `HTTP ${response.status}`;
+                if (response.statusText) {
+                    message += ` ${response.statusText}`;
+                }
+                if (raw) {
+                    message += `: ${raw}`;
+                }
+                if (response.status === 403) {
+                    message += ' — доступ запрещён. Проверьте актуальность вебхука и разрешение для входящих запросов.';
+                } else if (response.status === 401) {
+                    message += ' — требуется авторизация. Создайте новый вебхук или обновите ключ.';
+                }
+                throw new Error(message);
             }
 
-            if (proxyData.result === undefined) {
-                console.warn('Bitrix proxy returned unexpected payload structure.', proxyData);
-                return proxyData;
+            if (!raw) {
+                return {};
             }
 
-            return proxyData.result;
+            let data;
+            try {
+                data = JSON.parse(raw);
+            } catch (error) {
+                throw new Error('Не удалось разобрать ответ Bitrix24. Проверьте формат ответа вебхука.');
+            }
+
+            if (data.error) {
+                throw new Error(data.error_description || data.error);
+            }
+
+            if (typeof data.result === 'undefined') {
+                return {};
+            }
+
+            return data.result;
+        }
+
+        async function performProxyBitrixRequest({ webhook, method, params }) {
+            let response;
+            try {
+                response = await fetch('/api/bitrix', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        webhook,
+                        method,
+                        params
+                    })
+                });
+            } catch (error) {
+                throw new Error(`Прокси Bitrix24 недоступен: ${error.message}`);
+            }
+
+            const raw = await response.text();
+
+            if (!response.ok) {
+                let message = `Прокси Bitrix24 вернул ошибку HTTP ${response.status}`;
+                if (response.statusText) {
+                    message += ` ${response.statusText}`;
+                }
+
+                if (raw) {
+                    try {
+                        const data = JSON.parse(raw);
+                        const details = data.error_description || data.error || data.message;
+                        if (details) {
+                            message += `: ${details}`;
+                        } else {
+                            message += `: ${raw}`;
+                        }
+                    } catch (parseError) {
+                        message += `: ${raw}`;
+                    }
+                }
+
+                throw new Error(message);
+            }
+
+            if (!raw) {
+                return {};
+            }
+
+            let data;
+            try {
+                data = JSON.parse(raw);
+            } catch (error) {
+                throw new Error('Прокси Bitrix24 вернул невалидный JSON.');
+            }
+
+            if (data.error) {
+                throw new Error(data.error_description || data.error);
+            }
+
+            if (typeof data.result === 'undefined') {
+                return {};
+            }
+
+            return data.result;
         }
     </script>
 </body>
