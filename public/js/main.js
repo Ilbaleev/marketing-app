@@ -63,10 +63,8 @@ const state = {
     tasksTotal: 0
 };
 
-const projectsState = {
-    items: [],
-    activeFilter: 'active'
-};
+const projectsState = { items: [], activeFilter: 'all', loadedOnce: false };
+
 
 
 const bitrixTransportState = {
