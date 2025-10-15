@@ -13,6 +13,7 @@ export const CONFIG = {
     PROJECTS: {
         IBLOCK_ID: '31',
         FIELDS: {
+            TITLE: 'TITLE',  
             STATUS: 'STATUS',
             PRIORITY: 'PRIORITY',
             SITE_URL: 'SITE_URL',
