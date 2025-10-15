@@ -464,11 +464,15 @@ export async function createProject(project) {
     const { IBLOCK_ID } = ensureProjectsConfig();
 
     // КЛЮЧЕВОЕ: отправляем FIELDS{ NAME, PROPERTY_* }
-    await callBitrixLists('lists.element.add', {
-        IBLOCK_TYPE_ID: 'lists',
-        IBLOCK_ID,
-        FIELDS: toFields(project)
-    });
+await callBitrixLists('lists.element.add', {
+    IBLOCK_TYPE_ID: 'lists',
+    IBLOCK_ID,
+    FIELDS: {
+        ...toFields(project),
+        ELEMENT_CODE: `project_${Date.now()}`  // <--- добавляем уникальный код
+    }
+});
+
 
     // Перечитаем список (или можешь добавить фильтр по NAME)
     const fetched = await callBitrixLists('lists.element.get', {
