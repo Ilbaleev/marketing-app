@@ -480,7 +480,25 @@ export async function getProjects() {
     throw new Error(`Bitrix вернул неожиданный формат или пустой список. Сырые данные: ${sample}`);
   }
 
+    // ----- Временный вывод для Mini App -----
+document.body.insertAdjacentHTML('beforeend',
+  `<pre style="
+    color: white;
+    font-size: 10px;
+    background: rgba(0,0,0,0.7);
+    padding: 8px;
+    max-height: 200px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  ">
+  ${JSON.stringify(payload, null, 2)}
+  </pre>`
+);
+// ----- Конец временного вывода -----
+
   return items.map(mapBitrixElementToProject).filter(Boolean);
+    
 }
 
 
