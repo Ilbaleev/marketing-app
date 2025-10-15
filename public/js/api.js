@@ -344,3 +344,95 @@ export async function fetchTasks({
 
     return state.tasks;
 }
+
+function extractErrorMessage(raw, fallback) {
+    if (!raw) {
+        return fallback;
+    }
+
+    try {
+        const data = JSON.parse(raw);
+        if (data && typeof data === 'object') {
+            return data.error || data.message || fallback;
+        }
+    } catch (error) {
+        // ignore JSON parse errors
+    }
+
+    return `${fallback}: ${raw}`;
+}
+
+async function parseJsonResponse(response, fallbackMessage) {
+    const raw = await response.text();
+
+    if (!response.ok) {
+        throw new Error(extractErrorMessage(raw, fallbackMessage));
+    }
+
+    if (!raw) {
+        return null;
+    }
+
+    try {
+        return JSON.parse(raw);
+    } catch (error) {
+        throw new Error(`${fallbackMessage}: невалидный JSON`);
+    }
+}
+
+export async function getProjects() {
+    let response;
+    try {
+        response = await fetch('/server/projects', {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+    } catch (error) {
+        throw new Error(`Не удалось загрузить проекты: ${error.message}`);
+    }
+
+    const data = await parseJsonResponse(response, 'Не удалось загрузить проекты');
+    return Array.isArray(data) ? data : [];
+}
+
+export async function createProject(payload) {
+    let response;
+    try {
+        response = await fetch('/server/projects', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(payload || {})
+        });
+    } catch (error) {
+        throw new Error(`Не удалось создать проект: ${error.message}`);
+    }
+
+    return parseJsonResponse(response, 'Не удалось создать проект');
+}
+
+export async function patchProject(id, patch) {
+    if (!id) {
+        throw new Error('Не указан идентификатор проекта');
+    }
+
+    let response;
+    try {
+        response = await fetch(`/server/projects/${encodeURIComponent(id)}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(patch || {})
+        });
+    } catch (error) {
+        throw new Error(`Не удалось обновить проект: ${error.message}`);
+    }
+
+    return parseJsonResponse(response, 'Не удалось обновить проект');
+}
