@@ -4,3 +4,12 @@
   "private": true,
   "type": "module"
 }
+{
+  "type": "module",
+  "scripts": {
+    "dev": "node server/index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
