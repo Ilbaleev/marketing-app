@@ -373,6 +373,12 @@ function toFields(project) {
     NAME: title || 'Без названия'
   };
 
+  // ← ДОБАВЬ ЭТО: если у тебя в списке есть обязательное поле TITLE — заполним его
+  if (FIELDS.TITLE) {
+    const key = propKey(FIELDS.TITLE); // 'TITLE' или 'PROPERTY_<ID>' — функция уже есть
+    fields[key] = fields.NAME;
+  }
+
   const status   = typeof project?.status === 'string'  ? project.status.trim()  : project?.status;
   const priority = typeof project?.priority === 'string'? project.priority.trim(): project?.priority;
   const siteUrl  = typeof project?.siteUrl === 'string' ? project.siteUrl.trim() : project?.siteUrl;
@@ -385,6 +391,7 @@ function toFields(project) {
 
   return fields;
 }
+
 
 function toBitrixPropertyKey(codeOrId) {
     if (typeof codeOrId === 'number' || /^\d+$/.test(String(codeOrId))) {
@@ -461,33 +468,32 @@ export async function getProjects() {
 }
 
 export async function createProject(project) {
-    const { IBLOCK_ID } = ensureProjectsConfig();
+  const { IBLOCK_ID } = ensureProjectsConfig();
 
-    // КЛЮЧЕВОЕ: отправляем FIELDS{ NAME, PROPERTY_* }
-await callBitrixLists('lists.element.add', {
+  // ГЕНЕРИРУЕМ УНИКАЛЬНЫЙ КОД ЭЛЕМЕНТА (ТРЕБУЕТСЯ СПИСКОМ)
+  const elementCode = `project_${Date.now()}`;
+
+  await callBitrixLists('lists.element.add', {
     IBLOCK_TYPE_ID: 'lists',
     IBLOCK_ID,
-    FIELDS: {
-        ...toFields(project),
-        ELEMENT_CODE: `project_${Date.now()}`  // <--- добавляем уникальный код
-    }
-});
+    ELEMENT_CODE: elementCode,     // <-- ВАЖНО: НЕ в FIELDS, а ОТДЕЛЬНО
+    FIELDS: toFields(project)      // NAME + свойства
+  });
 
+  // перечитываем список (можно добавить FILTER по NAME/ID — не обязательно)
+  const fetched = await callBitrixLists('lists.element.get', {
+    IBLOCK_TYPE_ID: 'lists',
+    IBLOCK_ID
+  });
 
-    // Перечитаем список (или можешь добавить фильтр по NAME)
-    const fetched = await callBitrixLists('lists.element.get', {
-        IBLOCK_TYPE_ID: 'lists',
-        IBLOCK_ID
-    });
+  const items = Array.isArray(fetched?.result) ? fetched.result
+              : Array.isArray(fetched) ? fetched
+              : [];
+  const element = items[0] || null;
 
-    const items = Array.isArray(fetched?.result) ? fetched.result
-                : Array.isArray(fetched) ? fetched
-                : [];
-
-    const element = items[0] || null; // берём первый (или найди по имени)
-
-    return mapBitrixElementToProject(element || { ID: '0', NAME: project?.title });
+  return mapBitrixElementToProject(element || { ID: '0', NAME: project?.title });
 }
+
 
 
 export async function patchProject(id, patch) {
