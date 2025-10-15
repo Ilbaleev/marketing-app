@@ -365,19 +365,11 @@ const propKey = k => (typeof k === 'number' || /^\d+$/.test(String(k)))
 function toFields(project) {
   const { FIELDS = {} } = ensureProjectsConfig();
 
-  const title = typeof project?.title === 'string'
-    ? project.title.trim()
-    : project?.title;
-
+  const title = typeof project?.title === 'string' ? project.title.trim() : project?.title;
+    
   const fields = {
     NAME: title || 'Без названия'
   };
-
-  // ← ДОБАВЬ ЭТО: если у тебя в списке есть обязательное поле TITLE — заполним его
-  if (FIELDS.TITLE) {
-    const key = propKey(FIELDS.TITLE); // 'TITLE' или 'PROPERTY_<ID>' — функция уже есть
-    fields[key] = fields.NAME;
-  }
 
   const status   = typeof project?.status === 'string'  ? project.status.trim()  : project?.status;
   const priority = typeof project?.priority === 'string'? project.priority.trim(): project?.priority;
@@ -455,7 +447,8 @@ export async function getProjects() {
     const { IBLOCK_ID } = ensureProjectsConfig();
     const payload = await callBitrixLists('lists.element.get', {
         IBLOCK_TYPE_ID: 'lists',
-        IBLOCK_ID
+        IBLOCK_ID,
+        SELECT: ['ID','NAME','DATE_CREATE','TIMESTAMP_X','PROPERTY_*']
     });
 
     const items = Array.isArray(payload?.result)
