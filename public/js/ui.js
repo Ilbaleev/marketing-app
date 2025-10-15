@@ -13,6 +13,7 @@ import {
     getTaskStatusClass,
     getTaskStatusText,
     getTaskValue,
+    parseDate,
     percent,
     truncate
 } from './helpers.js';
@@ -142,30 +143,74 @@ export function renderAnalytics(summary) {
     `;
 }
 
-export function renderTeam(members) {
-    if (!members.length) {
-        return '<div class="empty-state">Добавьте сотрудников в CONFIG.TEAM_MEMBERS, чтобы отобразить команду.</div>';
+export function renderProjects(projects) {
+    if (!projects.length) {
+        return '<div class="empty-state">Проекты с выбранным фильтром пока не найдены.</div>';
     }
 
-    const items = members.map(member => {
-        const name = escapeHTML(member.name || 'Без имени');
-        const role = escapeHTML(member.role || '');
-        const focus = escapeHTML(member.focus || '');
-        const contacts = [
-            member.telegram ? `Telegram: <a href="https://t.me/${escapeAttribute(member.telegram.replace('@', ''))}" target="_blank" rel="noopener">${escapeHTML(member.telegram)}</a>` : '',
-            member.phone ? `Телефон: <a href="tel:${escapeAttribute(member.phone)}">${escapeHTML(member.phone)}</a>` : '',
-            member.email ? `Email: <a href="mailto:${escapeAttribute(member.email)}">${escapeHTML(member.email)}</a>` : ''
-        ].filter(Boolean).map(item => `<span>${item}</span>`).join('');
+    return projects.map(project => {
+        const name = escapeHTML(project.name || 'Без названия');
+        const statusMeta = getProjectStatusMeta(project.status);
+        const priorityLabel = getProjectPriorityLabel(project.priority);
+        const siteLink = formatProjectLink(project.siteUrl, 'Перейти на сайт');
+        const driveLink = formatProjectLink(project.driveUrl, 'Открыть папку');
+        const createdDate = parseDate(project.createdAt);
+        const createdLabel = createdDate ? formatDateTime(createdDate) : 'Дата не указана';
 
         return `
-            <li class="team-member">
-                <h3>${name}</h3>
-                ${role ? `<p class="team-role">${role}</p>` : ''}
-                ${focus ? `<p class="team-focus">${focus}</p>` : ''}
-                ${contacts ? `<div class="team-meta">${contacts}</div>` : ''}
-            </li>
+            <article class="project-card">
+                <div class="project-header">
+                    <h3 class="project-title">${name}</h3>
+                    <span class="status-badge ${statusMeta.className}">${statusMeta.label}</span>
+                </div>
+                <div class="project-priority badge">${priorityLabel}</div>
+                <div class="project-attributes">
+                    <div class="project-attribute">
+                        <span class="project-attribute-label">Сайт:</span>
+                        ${siteLink}
+                    </div>
+                    <div class="project-attribute">
+                        <span class="project-attribute-label">Ссылка на Диск:</span>
+                        ${driveLink}
+                    </div>
+                    <div class="project-attribute">
+                        <span class="project-attribute-label">Создан:</span>
+                        <span class="project-attribute-value">${escapeHTML(createdLabel)}</span>
+                    </div>
+                </div>
+            </article>
         `;
     }).join('');
+}
 
-    return `<ul class="team-list">${items}</ul>`;
+function getProjectStatusMeta(status) {
+    switch ((status || '').toString()) {
+        case 'completed':
+            return { label: 'Завершён', className: 'status-completed' };
+        case 'paused':
+            return { label: 'На паузе', className: 'status-paused' };
+        case 'active':
+        default:
+            return { label: 'Активный', className: 'status-active' };
+    }
+}
+
+function getProjectPriorityLabel(priority) {
+    switch ((priority || '').toString()) {
+        case 'high':
+            return '🔥 Высокий приоритет';
+        case 'elevated':
+            return '⚡ Повышенный приоритет';
+        case 'medium':
+        default:
+            return 'Средний приоритет';
+    }
+}
+
+function formatProjectLink(url, label) {
+    if (!url) {
+        return '<span class="project-attribute-value">—</span>';
+    }
+    return `<a href="${escapeAttribute(url)}" target="_blank" rel="noopener" class="project-link">${escapeHTML(label)}</a>`;
+
 }
