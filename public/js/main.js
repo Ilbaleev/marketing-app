@@ -21,8 +21,8 @@ import {
 import {
     clearInlineError,
     renderAnalytics,
+    renderProjects,  
     renderTask,
-    renderTeam,
     showInlineError,
     toggleHidden,
     updateActiveUserInfo,
@@ -60,6 +60,12 @@ const state = {
     tasksTotal: 0
 };
 
+const projectsState = {
+    items: (CONFIG.PROJECTS || []).map(normalizeProjectRecord).filter(Boolean),
+    activeFilter: 'active'
+};
+
+
 const bitrixTransportState = {
     preferProxy: false,
     supportsProxy: typeof window !== 'undefined'
@@ -85,7 +91,7 @@ const pageLoaders = {
     dashboard: () => loadDashboardStats(),
     tasks: () => loadUserTasks(),
     analytics: () => loadAnalytics(),
-    team: () => loadTeam()
+    projects: () => loadProjects()    
 };
 
 if (hasBackButton) {
@@ -157,6 +163,19 @@ function setupEventHandlers() {
         });
     }
 }
+
+    const projectFilter = document.getElementById('projectStatusFilter');
+    if (projectFilter) {
+        projectFilter.addEventListener('change', event => {
+            projectsState.activeFilter = event.target.value;
+            loadProjects({ filter: event.target.value });
+        });
+    }
+
+    const projectForm = document.getElementById('projectForm');
+    if (projectForm) {
+        projectForm.addEventListener('submit', handleProjectSubmit);
+    }
 
 function detectUser() {
     const hasManualOverrides = Boolean(manualTelegramId || manualBitrixUserId);
@@ -374,12 +393,95 @@ async function loadAnalytics({ force = false } = {}) {
     }
 }
 
-function loadTeam() {
-    const container = document.getElementById('teamContent');
+function loadProjects({ filter } = {}) {
+    const container = document.getElementById('projectContent');
     if (!container) return;
+    const filterSelect = document.getElementById('projectStatusFilter');
+    const selectedFilter = filter || projectsState.activeFilter || (filterSelect ? filterSelect.value : 'active');
 
-    const members = CONFIG.TEAM_MEMBERS || [];
-    container.innerHTML = renderTeam(members);
+    projectsState.activeFilter = selectedFilter;
+
+    if (filterSelect && filterSelect.value !== selectedFilter) {
+        filterSelect.value = selectedFilter;
+    }
+
+    const filteredProjects = selectedFilter === 'all'
+        ? projectsState.items
+        : projectsState.items.filter(project => project.status === selectedFilter);
+
+    container.innerHTML = renderProjects(filteredProjects);
+}
+
+function handleProjectSubmit(event) {
+    event.preventDefault();
+
+    const form = event.target;
+    const formData = new FormData(form);
+    const name = (formData.get('name') || '').toString().trim();
+
+    if (!name) {
+        return;
+    }
+
+    const createdAtInput = formData.get('createdAt');
+    let createdAtValue = createdAtInput ? createdAtInput.toString() : '';
+    if (createdAtValue) {
+        const date = new Date(createdAtValue);
+        createdAtValue = Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+    } else {
+        createdAtValue = new Date().toISOString();
+    }
+
+    const newProject = normalizeProjectRecord({
+        id: createProjectId(),
+        name,
+        status: (formData.get('status') || 'active').toString(),
+        priority: (formData.get('priority') || 'medium').toString(),
+        siteUrl: (formData.get('siteUrl') || '').toString().trim(),
+        driveUrl: (formData.get('driveUrl') || '').toString().trim(),
+        createdAt: createdAtValue
+    });
+
+    projectsState.items = [newProject, ...projectsState.items];
+
+    form.reset();
+
+    const statusInput = document.getElementById('projectStatusInput');
+    if (statusInput) {
+        statusInput.value = 'active';
+    }
+
+    projectsState.activeFilter = 'all';
+    const filterSelect = document.getElementById('projectStatusFilter');
+    if (filterSelect) {
+        filterSelect.value = 'all';
+    }
+
+    loadProjects({ filter: 'all' });
+}
+
+function createProjectId() {
+    return `p-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+}
+
+function normalizeProjectRecord(project) {
+    if (!project) {
+        return null;
+    }
+
+    const createdAt = project.createdAt || project.created_at || project.dateCreated || project.created;
+    const createdDate = createdAt ? new Date(createdAt) : new Date();
+
+    return {
+        id: project.id || createProjectId(),
+        name: project.name || 'Без названия',
+        status: (project.status || 'active').toString(),
+        priority: (project.priority || 'medium').toString(),
+        siteUrl: project.siteUrl || project.site || '',
+        driveUrl: project.driveUrl || project.drive || project.diskUrl || '',
+        createdAt: Number.isNaN(createdDate.getTime()) ? new Date().toISOString() : createdDate.toISOString()
+    };
+
 }
 
 async function testBitrixConnection() {
