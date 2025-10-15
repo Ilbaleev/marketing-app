@@ -13,31 +13,22 @@ export const CONFIG = {
     PROJECTS: [
         {
             id: 'p-1',
-            name: 'Редизайн корпоративного сайта',
+            name: 'Анатомия улыбки',
             status: 'active',
             priority: 'elevated',
-            siteUrl: 'https://example-agency.kz',
-            driveUrl: 'https://drive.google.com/drive/folders/example1',
-            createdAt: '2024-04-12T09:30:00+05:00'
+            siteUrl: 'https://anatomiya-ulibki.ru/',
+            driveUrl: 'https://disk.yandex.ru/d/i8fpvqavCSE-SA',
+            createdAt: '2025-10-15T09:30:00+03:00'
         },
         {
             id: 'p-2',
-            name: 'Запуск рекламной кампании в Meta',
+            name: 'Тест',
             status: 'paused',
             priority: 'medium',
-            siteUrl: 'https://meta-campaign.agency',
-            driveUrl: 'https://drive.google.com/drive/folders/example2',
-            createdAt: '2024-03-28T11:15:00+05:00'
+            siteUrl: 'https://mpb.agency',
+            driveUrl: 'https:///example2.ru',
+            createdAt: '2025-03-28T11:15:00+03:00'
         },
-        {
-            id: 'p-3',
-            name: 'Внедрение CRM для отдела продаж',
-            status: 'completed',
-            priority: 'high',
-            siteUrl: 'https://crm-launch.agency',
-            driveUrl: 'https://drive.google.com/drive/folders/example3',
-            createdAt: '2024-02-18T16:45:00+05:00'
-        }
     ],
     DEMO_MODE: false,
     DEMO_TASKS: [
