@@ -561,4 +561,89 @@ export async function patchProject(id, patch) {
     return mapBitrixElementToProject(element || { ID: id });
 }
 
+// ===== ВРЕМЕННАЯ ДИАГНОСТИКА =====
+export async function __debugProbeProjects() {
+  // 0) Проверим, что вебхук есть
+  const webhook = (CONFIG && CONFIG.BITRIX_WEBHOOK) || '';
+  if (!webhook) {
+    alert('Нет CONFIG.BITRIX_WEBHOOK');
+    return;
+  }
+
+  // Хелпер безопасного алерта
+  const show = (label, obj) => {
+    try {
+      alert(`${label}: ` + JSON.stringify(obj, null, 2).slice(0, 950));
+    } catch (e) {
+      alert(`${label}: [cannot stringify]`);
+    }
+  };
+
+  // 1) Список всех списков (видимых вебхуку)
+  let lists;
+  try {
+    lists = await performProxyBitrixRequest({
+      webhook,
+      method: 'lists.get',
+      params: { IBLOCK_TYPE_ID: 'lists' }
+    });
+    show('lists.get', lists);
+  } catch (e) {
+    show('lists.get ERROR', { message: e?.message });
+    return;
+  }
+
+  // 2) Поля у IBLOCK_ID из конфига
+  const iblockId = Number(CONFIG?.PROJECTS?.IBLOCK_ID || 0);
+  if (!iblockId) {
+    alert('CONFIG.PROJECTS.IBLOCK_ID пустой');
+    return;
+  }
+  let fields;
+  try {
+    fields = await performProxyBitrixRequest({
+      webhook,
+      method: 'lists.field.get',
+      params: { IBLOCK_TYPE_ID: 'lists', IBLOCK_ID: iblockId }
+    });
+    show('lists.field.get', fields);
+  } catch (e) {
+    show('lists.field.get ERROR', { message: e?.message });
+    return;
+  }
+
+  // 3) Элементы без SELECT/FILTER (как есть)
+  let plain;
+  try {
+    plain = await performProxyBitrixRequest({
+      webhook,
+      method: 'lists.element.get',
+      params: { IBLOCK_TYPE_ID: 'lists', IBLOCK_ID: iblockId }
+    });
+    show('lists.element.get (plain)', plain);
+  } catch (e) {
+    show('lists.element.get ERROR', { message: e?.message });
+    return;
+  }
+
+  // 4) Элементы с SELECT (на всякий случай)
+  let withSelect;
+  try {
+    withSelect = await performProxyBitrixRequest({
+      webhook,
+      method: 'lists.element.get',
+      params: {
+        IBLOCK_TYPE_ID: 'lists',
+        IBLOCK_ID: iblockId,
+        SELECT: ['ID','NAME','DATE_CREATE','TIMESTAMP_X','PROPERTY_*'],
+        FILTER: {}
+      }
+    });
+    show('lists.element.get (with SELECT)', withSelect);
+  } catch (e) {
+    show('lists.element.get (with SELECT) ERROR', { message: e?.message });
+    return;
+  }
+}
+// ===== КОНЕЦ ДИАГНОСТИКИ =====
 
