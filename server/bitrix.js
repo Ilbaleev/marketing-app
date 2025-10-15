@@ -1,3 +1,10 @@
+/**
+ * Серверный прокси для Bitrix24: принимает запросы от фронтенда,
+ * перенаправляет их в REST API и возвращает нормализованный ответ.
+ */
+
+import { ensureTrailingSlash, toUrlParams } from '../public/js/helpers.js';
+
 const ALLOWED_METHODS = new Set([
   'tasks.task.list',
   'profile',
@@ -8,60 +15,6 @@ function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Telegram-Init-Data');
-}
-
-function ensureTrailingSlash(value) {
-  if (!value) {
-    return '';
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return '';
-  }
-
-  return trimmed.endsWith('/') ? trimmed : `${trimmed}/`;
-}
-
-function toUrlParams(params = {}) {
-  const search = new URLSearchParams();
-  const stack = Object.keys(params || {}).map(key => ({
-    key,
-    value: params[key]
-  }));
-
-  while (stack.length) {
-    const { key, value } = stack.pop();
-    if (value === undefined || value === null) {
-      continue;
-    }
-
-    if (Array.isArray(value)) {
-      value.forEach(item => {
-        search.append(`${key}[]`, item);
-      });
-      continue;
-    }
-
-    if (typeof value === 'object') {
-      const entries = Object.keys(value);
-      if (!entries.length) {
-        continue;
-      }
-
-      entries.forEach(subKey => {
-        stack.push({
-          key: `${key}[${subKey}]`,
-          value: value[subKey]
-        });
-      });
-      continue;
-    }
-
-    search.append(key, value);
-  }
-
-  return search;
 }
 
 function parseBody(req) {
@@ -80,7 +33,7 @@ function parseBody(req) {
   }
 }
 
-async function handler(req, res) {
+export default async function handler(req, res) {
   setCors(res);
 
   if (req.method === 'OPTIONS') {
@@ -161,5 +114,3 @@ async function handler(req, res) {
 
   res.status(200).json(data);
 }
-
-module.exports = handler;
