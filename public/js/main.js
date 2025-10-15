@@ -60,15 +60,12 @@ const hasBackButton = Boolean(tg && tg.BackButton);
 const state = {
     tasks: [],
     tasksLoadedAt: null,
-    tasksTotal: 0,
-    projects: [],
-    projectsLoadedAt: null
+    tasksTotal: 0
 };
 
 const projectsState = {
     items: [],
-    activeFilter: 'active',
-    loadedOnce: false
+    activeFilter: 'active'
 };
 
 
@@ -177,13 +174,14 @@ function setupEventHandlers() {
     const projectFilter = document.getElementById('projectFilter');
     if (projectFilter) {
         projectFilter.addEventListener('change', event => {
-            loadProjects({ filter: event.target.value });
+            projectsState.activeFilter = event.target.value;
+            loadProjects();
         });
     }
 
     const projectsContainer = document.getElementById('projectsContent');
     if (projectsContainer) {
-        projectsContainer.addEventListener('click', onProjectStatusToggle);
+        projectsContainer.addEventListener('click', onProjectAction);
     }
 }
 function detectUser() {
@@ -402,52 +400,36 @@ async function loadAnalytics({ force = false } = {}) {
     }
 }
 
-async function loadProjects({ filter } = {}) {
+async function loadProjects() {
     const container = document.getElementById('projectsContent');
-    if (!container) return;
-
     const filterSelect = document.getElementById('projectFilter');
-    const allowedFilters = new Set(['active', 'paused', 'done', 'all']);
-    const fallbackFilter = filterSelect ? filterSelect.value : projectsState.activeFilter;
-    let selectedFilter = filter || projectsState.activeFilter || fallbackFilter || 'active';
-    if (!allowedFilters.has(selectedFilter)) {
-        selectedFilter = 'all';
+    const errorContainer = document.getElementById('projectsError');
+
+    if (!container) {
+        return;
     }
 
-    projectsState.activeFilter = selectedFilter;
+    container.innerHTML = '<div class="loading">Загружаем проекты...</div>';
+    clearInlineError(errorContainer);
 
-    if (filterSelect && filterSelect.value !== selectedFilter) {
-        filterSelect.value = selectedFilter;
-    }
-
-    clearInlineError(projectsErrorEl);
-
-    if (!projectsState.loadedOnce) {
-        container.innerHTML = '<div class="loading">Загружаем проекты...</div>';
+    if (filterSelect && filterSelect.value !== projectsState.activeFilter) {
+        filterSelect.value = projectsState.activeFilter;
     }
 
     try {
-        if (!projectsState.loadedOnce) {
-            const projects = await getProjects();
-            projectsState.items = Array.isArray(projects)
-                ? projects.map(normalizeProjectRecord).filter(Boolean)
-                : [];
-            projectsState.loadedOnce = true;
-            state.projectsLoadedAt = new Date();
-        }
+        const list = await getProjects();
+        projectsState.items = Array.isArray(list) ? list : [];
 
-        const filteredProjects = selectedFilter === 'all'
+        const filter = projectsState.activeFilter || 'active';
+        const filtered = filter === 'all'
             ? projectsState.items
-            : projectsState.items.filter(project => project && project.status === selectedFilter);
+            : projectsState.items.filter(project => project && project.status === filter);
 
-        container.innerHTML = renderProjectsList(filteredProjects);
+        container.innerHTML = renderProjectsList(filtered);
     } catch (error) {
         console.error('Ошибка загрузки проектов:', error);
-        if (!projectsState.loadedOnce) {
-            container.innerHTML = '';
-        }
-        projectsState.loadedOnce = false;
-        showInlineError(projectsErrorEl, error.message || 'Не удалось загрузить проекты.');
+        container.innerHTML = '';
+        showInlineError(errorContainer, error?.message || 'Ошибка загрузки проектов');
     }
 }
 
@@ -474,120 +456,47 @@ async function onCreateProject(event) {
         driveUrl: (formData.get('driveUrl') || '').toString().trim()
     };
 
-    const submitButton = form.querySelector('[type="submit"]');
-    if (submitButton) {
-        submitButton.disabled = true;
-    }
-
     clearInlineError(projectsErrorEl);
 
     try {
         const savedProject = await createProject(payload);
-        const normalizedProject = normalizeProjectRecord(savedProject);
-
-        if (normalizedProject) {
-            projectsState.items = [normalizedProject, ...projectsState.items];
-            projectsState.loadedOnce = true;
-        }
-
-        state.projectsLoadedAt = new Date();
+        projectsState.items = [savedProject, ...projectsState.items];
         form.reset();
-        await loadProjects({ filter: 'all' });
+        await loadProjects();
     } catch (error) {
         console.error('Ошибка создания проекта:', error);
-        showInlineError(projectsErrorEl, error.message || 'Не удалось создать проект.');
-    } finally {
-        if (submitButton) {
-            submitButton.disabled = false;
-        }
+        showInlineError(projectsErrorEl, error.message || 'Не удалось создать проект');
     }
 }
-async function onProjectStatusToggle(event) {
+
+async function onProjectAction(event) {
     const button = event.target.closest('.project-status-toggle');
     if (!button) {
         return;
     }
 
     event.preventDefault();
+
     const projectId = button.dataset.id;
-    if (!projectId) {
+    const project = projectsState.items.find(item => item && item.id === projectId);
+    if (!project) {
         return;
     }
 
-    clearInlineError(projectsErrorEl);
-
-    const statuses = ['active', 'paused', 'done'];
-    const currentProject = projectsState.items.find(project => project && project.id === projectId);
-    const currentStatus = currentProject && typeof currentProject.status === 'string'
-        ? currentProject.status
-        : 'active';
-    const currentIndex = statuses.indexOf(currentStatus);
-    const nextStatus = statuses[(currentIndex + 1) % statuses.length];
-
-    button.disabled = true;
+    const nextStatus = project.status === 'active'
+        ? 'paused'
+        : project.status === 'paused'
+            ? 'done'
+            : 'active';
 
     try {
-        const updatedProject = await patchProject(projectId, { status: nextStatus });
-        const normalizedProject = normalizeProjectRecord(updatedProject);
-
-        projectsState.items = projectsState.items.map(project => {
-            if (!project || project.id !== projectId) {
-                return project;
-            }
-            return normalizedProject || project;
-        });
-
-        state.projectsLoadedAt = new Date();
-        await loadProjects({ filter: projectsState.activeFilter });
+        const updated = await patchProject(projectId, { status: nextStatus });
+        projectsState.items = projectsState.items.map(item => (item && item.id === projectId ? updated : item));
+        await loadProjects();
     } catch (error) {
         console.error('Ошибка обновления статуса проекта:', error);
-        showInlineError(projectsErrorEl, error.message || 'Не удалось обновить статус проекта.');
-    } finally {
-        button.disabled = false;
+        showInlineError(projectsErrorEl, error.message || 'Не удалось обновить проект');
     }
-}
-
-function normalizeProjectRecord(project) {
-    if (!project || typeof project !== 'object') {
-        return null;
-    }
-
-    const id = typeof project.id === 'string' && project.id.trim()
-        ? project.id.trim()
-        : project.id !== undefined && project.id !== null
-            ? String(project.id)
-            : null;
-
-    if (!id) {
-        return null;
-    }
-
-    const titleCandidates = [project.title, project.name];
-    let title = 'Без названия';
-    for (const candidate of titleCandidates) {
-        if (typeof candidate === 'string' && candidate.trim()) {
-            title = candidate.trim();
-            break;
-        }
-    }
-
-    const status = typeof project.status === 'string' && project.status.trim()
-        ? project.status.trim()
-        : 'active';
-    const priority = typeof project.priority === 'string' && project.priority.trim()
-        ? project.priority.trim()
-        : 'medium';
-
-    return {
-        id,
-        title,
-        status,
-        priority,
-        siteUrl: typeof project.siteUrl === 'string' ? project.siteUrl.trim() : '',
-        driveUrl: typeof project.driveUrl === 'string' ? project.driveUrl.trim() : '',
-        createdAt: project.createdAt || project.created_at || null,
-        updatedAt: project.updatedAt || project.updated_at || null
-    };
 }
 
 async function testBitrixConnection() {

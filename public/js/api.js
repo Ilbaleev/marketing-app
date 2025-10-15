@@ -9,6 +9,7 @@ import {
     normalizeNumber,
     toUrlParams
 } from './helpers.js';
+import { CONFIG } from './config.js';
 
 export function normalizeTaskRecord(task) {
     if (!task || typeof task !== 'object') {
@@ -345,74 +346,139 @@ export async function fetchTasks({
     return state.tasks;
 }
 
-function extractErrorMessage(raw, fallback) {
-    if (!raw) {
-        return fallback;
+function ensureProjectsConfig() {
+    const projectsConfig = CONFIG.PROJECTS;
+
+    if (!projectsConfig || !projectsConfig.IBLOCK_ID) {
+        throw new Error('CONFIG.PROJECTS.IBLOCK_ID не задан');
     }
 
-    try {
-        const data = JSON.parse(raw);
-        if (data && typeof data === 'object') {
-            return data.error || data.message || fallback;
-        }
-    } catch (error) {
-        // ignore JSON parse errors
-    }
-
-    return `${fallback}: ${raw}`;
+    return projectsConfig;
 }
 
-async function parseJsonResponse(response, fallbackMessage) {
-    const raw = await response.text();
+function toBitrixPropertyKey(codeOrId) {
+    if (typeof codeOrId === 'number' || /^\d+$/.test(String(codeOrId))) {
+        return `PROPERTY_${codeOrId}`;
+    }
+    return codeOrId;
+}
 
-    if (!response.ok) {
-        throw new Error(extractErrorMessage(raw, fallbackMessage));
+function mapProjectToBitrixPayload(project) {
+    const { IBLOCK_ID, FIELDS = {} } = ensureProjectsConfig();
+    const title = typeof project?.title === 'string' ? project.title.trim() : project?.title;
+    const payload = {
+        IBLOCK_TYPE_ID: 'lists',
+        IBLOCK_ID,
+        NAME: title || 'Без названия',
+        PROPERTY_VALUES: {}
+    };
+
+    const status = typeof project?.status === 'string' ? project.status.trim() : project?.status;
+    const priority = typeof project?.priority === 'string' ? project.priority.trim() : project?.priority;
+    const siteUrl = typeof project?.siteUrl === 'string' ? project.siteUrl.trim() : project?.siteUrl;
+    const driveUrl = typeof project?.driveUrl === 'string' ? project.driveUrl.trim() : project?.driveUrl;
+
+    if (status) {
+        payload.PROPERTY_VALUES[toBitrixPropertyKey(FIELDS.STATUS)] = status;
+    }
+    if (priority) {
+        payload.PROPERTY_VALUES[toBitrixPropertyKey(FIELDS.PRIORITY)] = priority;
+    }
+    if (siteUrl) {
+        payload.PROPERTY_VALUES[toBitrixPropertyKey(FIELDS.SITE_URL)] = siteUrl;
+    }
+    if (driveUrl) {
+        payload.PROPERTY_VALUES[toBitrixPropertyKey(FIELDS.DRIVE_URL)] = driveUrl;
     }
 
-    if (!raw) {
+    return payload;
+}
+
+function mapBitrixElementToProject(element) {
+    if (!element || typeof element !== 'object') {
         return null;
     }
 
-    try {
-        return JSON.parse(raw);
-    } catch (error) {
-        throw new Error(`${fallbackMessage}: невалидный JSON`);
+    const { FIELDS = {} } = ensureProjectsConfig();
+    const readProperty = key => {
+        const byId = (typeof key === 'number' || /^\d+$/.test(String(key))) ? `PROPERTY_${key}_VALUE` : null;
+        const byCode = typeof key === 'string' ? `${key}_VALUE` : null;
+        return element[byCode] ?? element[byId] ?? '';
+    };
+
+    const normalize = (value, fallback) => {
+        if (value === null || value === undefined) {
+            return fallback;
+        }
+
+        const text = String(value).trim();
+        return text || fallback;
+    };
+
+    return {
+        id: normalize(element.ID, ''),
+        title: normalize(element.NAME, 'Без названия'),
+        status: normalize(readProperty(FIELDS.STATUS), 'active'),
+        priority: normalize(readProperty(FIELDS.PRIORITY), 'medium'),
+        siteUrl: normalize(readProperty(FIELDS.SITE_URL), ''),
+        driveUrl: normalize(readProperty(FIELDS.DRIVE_URL), ''),
+        createdAt: normalize(element.DATE_CREATE, ''),
+        updatedAt: normalize(element.TIMESTAMP_X, '')
+    };
+}
+
+function ensureBitrixWebhook() {
+    if (!CONFIG.BITRIX_WEBHOOK) {
+        throw new Error('BITRIX_WEBHOOK не задан');
     }
+    return CONFIG.BITRIX_WEBHOOK;
+}
+
+async function callBitrixLists(method, params) {
+    const webhook = ensureBitrixWebhook();
+    const response = await performProxyBitrixRequest({ webhook, method, params });
+
+    if (response && typeof response === 'object' && response.error) {
+        throw new Error(response.error_description || response.error);
+    }
+
+    return response;
 }
 
 export async function getProjects() {
-    let response;
-    try {
-        response = await fetch('/server/projects', {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json'
-            }
-        });
-    } catch (error) {
-        throw new Error(`Не удалось загрузить проекты: ${error.message}`);
-    }
+    const { IBLOCK_ID } = ensureProjectsConfig();
+    const payload = await callBitrixLists('lists.element.get', {
+        IBLOCK_TYPE_ID: 'lists',
+        IBLOCK_ID
+    });
 
-    const data = await parseJsonResponse(response, 'Не удалось загрузить проекты');
-    return Array.isArray(data) ? data : [];
+    const items = Array.isArray(payload?.result)
+        ? payload.result
+        : Array.isArray(payload)
+            ? payload
+            : [];
+
+    return items.map(mapBitrixElementToProject).filter(Boolean);
 }
 
-export async function createProject(payload) {
-    let response;
-    try {
-        response = await fetch('/server/projects', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify(payload || {})
-        });
-    } catch (error) {
-        throw new Error(`Не удалось создать проект: ${error.message}`);
-    }
+export async function createProject(project) {
+    const { IBLOCK_ID } = ensureProjectsConfig();
+    const result = await callBitrixLists('lists.element.add', mapProjectToBitrixPayload(project));
+    const id = result?.result || result?.ID || result;
 
-    return parseJsonResponse(response, 'Не удалось создать проект');
+    const fetched = await callBitrixLists('lists.element.get', {
+        IBLOCK_TYPE_ID: 'lists',
+        IBLOCK_ID,
+        FILTER: { ID: id }
+    });
+
+    const element = Array.isArray(fetched?.result)
+        ? fetched.result[0]
+        : Array.isArray(fetched)
+            ? fetched[0]
+            : null;
+
+    return mapBitrixElementToProject(element || { ID: id, NAME: project?.title });
 }
 
 export async function patchProject(id, patch) {
@@ -420,19 +486,32 @@ export async function patchProject(id, patch) {
         throw new Error('Не указан идентификатор проекта');
     }
 
-    let response;
-    try {
-        response = await fetch(`/server/projects/${encodeURIComponent(id)}`, {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify(patch || {})
-        });
-    } catch (error) {
-        throw new Error(`Не удалось обновить проект: ${error.message}`);
+    const { IBLOCK_ID } = ensureProjectsConfig();
+    const mapped = mapProjectToBitrixPayload({ ...patch, title: patch?.title });
+    const updatePayload = {
+        IBLOCK_TYPE_ID: 'lists',
+        IBLOCK_ID,
+        ID: id,
+        PROPERTY_VALUES: mapped.PROPERTY_VALUES
+    };
+
+    if (patch?.title) {
+        updatePayload.NAME = mapped.NAME;
     }
 
-    return parseJsonResponse(response, 'Не удалось обновить проект');
+    await callBitrixLists('lists.element.update', updatePayload);
+
+    const fetched = await callBitrixLists('lists.element.get', {
+        IBLOCK_TYPE_ID: 'lists',
+        IBLOCK_ID,
+        FILTER: { ID: id }
+    });
+
+    const element = Array.isArray(fetched?.result)
+        ? fetched.result[0]
+        : Array.isArray(fetched)
+            ? fetched[0]
+            : null;
+
+    return mapBitrixElementToProject(element || { ID: id });
 }

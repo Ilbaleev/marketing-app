@@ -8,7 +8,12 @@ import { ensureTrailingSlash, toUrlParams } from '../public/js/helpers.js';
 const ALLOWED_METHODS = new Set([
   'tasks.task.list',
   'profile',
-  'user.get'
+  'user.get',
+  'lists.element.get',
+  'lists.element.add',
+  'lists.element.update',
+  'lists.get',
+  'lists.field.get'
 ]);
 
 function setCors(res) {

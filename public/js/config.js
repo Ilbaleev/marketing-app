@@ -10,26 +10,15 @@ export const CONFIG = {
     USER_MAPPING: {
         '721249582': '13'
     },
-    PROJECTS: [
-        {
-            id: 'p-1',
-            name: 'Анатомия улыбки',
-            status: 'active',
-            priority: 'elevated',
-            siteUrl: 'https://anatomiya-ulibki.ru/',
-            driveUrl: 'https://disk.yandex.ru/d/i8fpvqavCSE-SA',
-            createdAt: '2025-10-15T09:30:00+03:00'
-        },
-        {
-            id: 'p-2',
-            name: 'Тест',
-            status: 'paused',
-            priority: 'medium',
-            siteUrl: 'https://mpb.agency',
-            driveUrl: 'https:///example2.ru',
-            createdAt: '2025-03-28T11:15:00+03:00'
-        },
-    ],
+    PROJECTS: {
+        IBLOCK_ID: '31',
+        FIELDS: {
+            STATUS: 'STATUS',
+            PRIORITY: 'PRIORITY',
+            SITE_URL: 'SITE_URL',
+            DRIVE_URL: 'DRIVE_URL'
+        }
+    },
     DEMO_MODE: false,
     DEMO_TASKS: [
         {

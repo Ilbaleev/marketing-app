@@ -331,33 +331,6 @@ select:focus-visible {
     font-size: 18px;
 }
 
-.form-grid {
-    display: grid;
-    gap: 16px;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
-
-.form-field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    font-size: 13px;
-}
-
-.form-field input,
-.form-field select {
-    padding: 10px 12px;
-    border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    background: var(--tg-theme-secondary-bg-color, rgba(255, 255, 255, 0.04));
-    color: inherit;
-    font-size: 14px;
-}
-
-.form-field input::placeholder {
-    color: var(--tg-theme-hint-color, rgba(255, 255, 255, 0.5));
-}
-
 .project-actions {
     justify-content: flex-end;
     margin: 0 0 16px;

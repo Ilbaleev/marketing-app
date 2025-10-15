@@ -15,7 +15,6 @@ import {
     getTaskStatusClass,
     getTaskStatusText,
     getTaskValue,
-    parseDate,
     percent,
     truncate
 } from './helpers.js';
@@ -150,43 +149,47 @@ export function renderProjectCard(project) {
         return '';
     }
 
-    const statusKey = PROJECT_STATUS[project.status] ? project.status : 'active';
-    const priorityKey = PROJECT_PRIORITY[project.priority] ? project.priority : 'medium';
-    const statusLabel = PROJECT_STATUS[statusKey] || PROJECT_STATUS.active;
-    const priorityLabel = PROJECT_PRIORITY[priorityKey] || '';
-    const title = escapeHTML(project.title || 'Без названия');
-    const siteLink = typeof project.siteUrl === 'string' && project.siteUrl.trim()
+    const priorityLabel = PROJECT_PRIORITY[project.priority] || '';
+    const statusText = PROJECT_STATUS[project.status] || 'Неизвестно';
+    const safeId = escapeAttribute(project.id || '');
+    const safeTitle = escapeHTML(project.title || 'Без названия');
+    const siteLink = project.siteUrl
         ? `<a href="${escapeAttribute(project.siteUrl)}" target="_blank" rel="noopener">перейти</a>`
         : '—';
-    const driveLink = typeof project.driveUrl === 'string' && project.driveUrl.trim()
+    const driveLink = project.driveUrl
         ? `<a href="${escapeAttribute(project.driveUrl)}" target="_blank" rel="noopener">перейти</a>`
         : '—';
-    const createdDate = parseDate(project.createdAt);
-    const createdLabel = createdDate ? formatDateTime(createdDate) : '—';
+
+    let createdLabel = 'Создан: —';
+    if (project.createdAt) {
+        const createdDate = new Date(project.createdAt);
+        if (!Number.isNaN(createdDate.getTime())) {
+            createdLabel = `Создан: ${formatDateTime(createdDate)}`;
+        }
+    }
 
     return `
-        <article class="task-item project-item" data-id="${escapeAttribute(project.id || '')}">
-            <div class="task-header">
-                <h3 class="task-title">${title}</h3>
-                <span class="status-badge">${escapeHTML(statusLabel)}</span>
-            </div>
-            ${priorityLabel ? `<span class="badge">${priorityLabel}</span>` : ''}
-            <div class="task-meta">
-                <span>Сайт: ${siteLink}</span>
-                <span>Диск: ${driveLink}</span>
-            </div>
-            <div class="task-meta">
-                <span>Создан: ${escapeHTML(createdLabel)}</span>
-                <button class="secondary-button project-status-toggle" data-id="${escapeAttribute(project.id || '')}">Сменить статус</button>
-            </div>
+        <article class="task-item project-item" data-id="${safeId}">
+          <div class="task-header">
+            <h3 class="task-title">${safeTitle}</h3>
+            <span class="status-badge">${escapeHTML(statusText)}</span>
+          </div>
+          ${priorityLabel ? `<span class="badge">${priorityLabel}</span>` : ''}
+          <div class="task-meta">
+            <span>Сайт: ${siteLink}</span>
+            <span>Диск: ${driveLink}</span>
+          </div>
+          <div class="task-meta">
+            <span>${escapeHTML(createdLabel)}</span>
+            <button class="secondary-button project-status-toggle" data-id="${safeId}">Сменить статус</button>
+          </div>
         </article>
     `;
 }
 
 export function renderProjectsList(list) {
     if (!Array.isArray(list) || !list.length) {
-        return '<div class="empty-state">Проекты с выбранным фильтром пока не найдены.</div>';
+        return '<div class="empty-state">Проекты не найдены. Добавьте первый проект выше.</div>';
     }
     return list.map(renderProjectCard).join('');
-
 }
