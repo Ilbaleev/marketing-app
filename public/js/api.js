@@ -157,7 +157,7 @@ export async function performDirectBitrixRequest(url) {
 export async function performProxyBitrixRequest({ webhook, method, params }) {
     let response;
     try {
-        response = await fetch('/server/bitrix', {
+        response = await fetch('/api/bitrix', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
