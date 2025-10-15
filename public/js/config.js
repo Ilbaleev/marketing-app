@@ -10,27 +10,33 @@ export const CONFIG = {
     USER_MAPPING: {
         '721249582': '13'
     },
-    TEAM_MEMBERS: [
+    PROJECTS: [
         {
-            name: 'Асем Айдарова',
-            role: 'Руководитель маркетинговых проектов',
-            telegram: '@asem_marketing',
-            phone: '+7 777 000 0000',
-            focus: 'Стратегия продвижения и управление проектами'
+            id: 'p-1',
+            name: 'Редизайн корпоративного сайта',
+            status: 'active',
+            priority: 'elevated',
+            siteUrl: 'https://example-agency.kz',
+            driveUrl: 'https://drive.google.com/drive/folders/example1',
+            createdAt: '2024-04-12T09:30:00+05:00'
         },
         {
-            name: 'Ерлан Каирбеков',
-            role: 'Таргетолог',
-            telegram: '@erlan_ads',
-            phone: '+7 702 000 0000',
-            focus: 'Запуск и оптимизация рекламных кампаний'
+            id: 'p-2',
+            name: 'Запуск рекламной кампании в Meta',
+            status: 'paused',
+            priority: 'medium',
+            siteUrl: 'https://meta-campaign.agency',
+            driveUrl: 'https://drive.google.com/drive/folders/example2',
+            createdAt: '2024-03-28T11:15:00+05:00'
         },
         {
-            name: 'Мадина Садыкова',
-            role: 'Контент-маркетолог',
-            telegram: '@madina_content',
-            phone: '+7 701 000 0000',
-            focus: 'Контент-планирование и копирайтинг'
+            id: 'p-3',
+            name: 'Внедрение CRM для отдела продаж',
+            status: 'completed',
+            priority: 'high',
+            siteUrl: 'https://crm-launch.agency',
+            driveUrl: 'https://drive.google.com/drive/folders/example3',
+            createdAt: '2024-02-18T16:45:00+05:00'
         }
     ],
     DEMO_MODE: false,
