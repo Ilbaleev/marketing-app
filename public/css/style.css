@@ -2,11 +2,13 @@
     color-scheme: light dark;
 }
 
+
 *,
 *::before,
 *::after {
     box-sizing: border-box;
 }
+
 
 body {
     margin: 0;
@@ -23,6 +25,7 @@ a {
 
 .container {
     max-width: 420px;
+
     width: 100%;
     margin: 0 auto;
 }
@@ -39,6 +42,7 @@ a {
 
 .hint {
     margin: 5px 0 15px;
+    margin: 8px 0 0;
     font-size: 13px;
     color: var(--tg-theme-hint-color, rgba(255, 255, 255, 0.6));
 }
@@ -182,6 +186,7 @@ select:focus-visible {
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
     width: 100%;
     max-width: 100%;
+    gap: 12px;
 }
 
 .task-item {
