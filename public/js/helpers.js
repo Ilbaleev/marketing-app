@@ -11,6 +11,18 @@ const HTML_ESCAPE_MAP = {
     "'": '&#39;'
 };
 
+export const PROJECT_STATUS = {
+    active: 'Активный',
+    paused: 'На паузе',
+    done: 'Завершён'
+};
+
+export const PROJECT_PRIORITY = {
+    high: '🔥 Высокий приоритет',
+    medium: '⚡ Средний приоритет',
+    low: ''
+};
+
 export function ensureTrailingSlash(value) {
     if (!value) {
         return '';
