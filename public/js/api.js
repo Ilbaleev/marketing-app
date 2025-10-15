@@ -450,32 +450,41 @@ export async function getProjects() {
     IBLOCK_TYPE_ID: 'lists',
     IBLOCK_ID,
     SELECT: ['ID','NAME','DATE_CREATE','TIMESTAMP_X','PROPERTY_*'],
-    FILTER: {}
+    FILTER: {} // явный пустой фильтр
   });
 
-  // ВКЛЮЧАЕМ ЯВНЫЙ ЛОГ ОТВЕТА (временно, для проверки)
-  try {
-    console.debug('[Bitrix getProjects] raw payload:', payload);
-  } catch (_) {}
+  // ВРЕМЕННЫЙ ЛОГ (очень полезно, не удаляй пока пусто)
+  try { console.debug('[Bitrix getProjects] raw payload:', payload); } catch (_) {}
 
-  // У разных прокси и порталов форма может отличаться:
-  // payload → { result: [...] }  ИЛИ  { data: { result:[...] } }  ИЛИ просто [...]
-  const raw1 = (payload && payload.result != null) ? payload.result : payload;
-  const raw2 = (raw1 && raw1.data != null) ? raw1.data : raw1;
+  // 1) Частый случай: { result: [...] } или просто [...]
+  let raw = (payload && payload.result != null) ? payload.result : payload;
+
+  // 2) Иногда оборачивают: { data: { result: [...] } } или { data: [...] }
+  if (raw && raw.data != null) raw = raw.data;
 
   let items = [];
-  if (Array.isArray(raw2)) {
-    items = raw2;
-  } else if (raw2 && typeof raw2 === 'object') {
-    if (Array.isArray(raw2.result))       items = raw2.result;
-    else if (Array.isArray(raw2.items))   items = raw2.items;
-    else if (Array.isArray(raw2.elements))items = raw2.elements;
+  if (Array.isArray(raw)) {
+    items = raw;
+  } else if (raw && typeof raw === 'object') {
+    if (Array.isArray(raw.result))        items = raw.result;
+    else if (Array.isArray(raw.items))    items = raw.items;
+    else if (Array.isArray(raw.elements)) items = raw.elements;
     else {
-      // Последняя попытка — вытащить все массивы-потомки
-      const candidates = Object.values(raw2).filter(v => Array.isArray(v));
-      if (candidates.length) items = candidates.flat();
+      // 3) Последняя попытка — собрать все массивы-значения из объекта
+      const arrs = Object.values(raw).filter(v => Array.isArray(v));
+      if (arrs.length) items = arrs.flat();
     }
   }
+
+  // Если всё ещё пусто — отдаём понятную ошибку, чтобы ты её увидел в UI
+  if (!Array.isArray(items) || items.length === 0) {
+    const sample = JSON.stringify(payload ?? null).slice(0, 700);
+    throw new Error(`Bitrix вернул неожиданный формат или пустой список. Сырые данные: ${sample}`);
+  }
+
+  return items.map(mapBitrixElementToProject).filter(Boolean);
+}
+
 
   return items.map(mapBitrixElementToProject).filter(Boolean);
 }
