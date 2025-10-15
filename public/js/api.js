@@ -443,63 +443,76 @@ async function callBitrixLists(method, params) {
 
 export async function getProjects() {
   const { IBLOCK_ID } = ensureProjectsConfig();
+  const webhook = ensureBitrixWebhook();
 
-  const payload = await callBitrixLists('lists.element.get', {
-    IBLOCK_TYPE_ID: 'lists',
-    IBLOCK_ID,
-    SELECT: ['ID','NAME','DATE_CREATE','TIMESTAMP_X','PROPERTY_*'],
-    FILTER: {} // явный пустой фильтр
+  // 1) Узнаём точный тип списка и проверяем его видимость вебхуку
+  const listsResp = await performProxyBitrixRequest({
+    webhook,
+    method: 'lists.get',
+    params: { IBLOCK_TYPE_ID: 'lists' } // стартуем с "company lists"
   });
 
-  // ВРЕМЕННЫЙ ЛОГ (очень полезно, не удаляй пока пусто)
-  try { console.debug('[Bitrix getProjects] raw payload:', payload); } catch (_) {}
+  const listsRaw = (listsResp && listsResp.result != null) ? listsResp.result : listsResp;
+  const listsArr = Array.isArray(listsRaw) ? listsRaw : [];
+  // ищем по ID, а если не нашли — по имени "MPB Projects"
+  let meta = listsArr.find(x => String(x.ID) === String(IBLOCK_ID)) 
+          || listsArr.find(x => (x.NAME || '').toLowerCase().includes('mpb projects'));
 
-  // 1) Частый случай: { result: [...] } или просто [...]
-  let raw = (payload && payload.result != null) ? payload.result : payload;
+  // если не нашли, возможно тип не 'lists' — попробуем без IBLOCK_TYPE_ID
+  if (!meta) {
+    const alt = await performProxyBitrixRequest({
+      webhook,
+      method: 'lists.get',
+      params: {}
+    });
+    const altArr = Array.isArray(alt?.result) ? alt.result : Array.isArray(alt) ? alt : [];
+    meta = altArr.find(x => String(x.ID) === String(IBLOCK_ID)) || meta;
+  }
 
-  // 2) Иногда оборачивают: { data: { result: [...] } } или { data: [...] }
-  if (raw && raw.data != null) raw = raw.data;
+  if (!meta) {
+    throw new Error(`Список с IBLOCK_ID=${IBLOCK_ID} недоступен этому вебхуку (lists.get не вернул его). Проверьте права доступа.`);
+  }
 
-  let items = [];
-  if (Array.isArray(raw)) {
-    items = raw;
-  } else if (raw && typeof raw === 'object') {
-    if (Array.isArray(raw.result))        items = raw.result;
-    else if (Array.isArray(raw.items))    items = raw.items;
-    else if (Array.isArray(raw.elements)) items = raw.elements;
-    else {
-      // 3) Последняя попытка — собрать все массивы-значения из объекта
-      const arrs = Object.values(raw).filter(v => Array.isArray(v));
-      if (arrs.length) items = arrs.flat();
+  const TYPE_ID = meta.IBLOCK_TYPE_ID || 'lists';
+
+  // 2) Пробуем вытащить элементы тремя способами
+  const tries = [
+    { params: { IBLOCK_TYPE_ID: TYPE_ID, IBLOCK_ID, SELECT: ['ID','NAME','DATE_CREATE','TIMESTAMP_X','PROPERTY_*'] } },
+    { params: { IBLOCK_TYPE_ID: TYPE_ID, IBLOCK_ID, SELECT: ['ID','NAME','DATE_CREATE','TIMESTAMP_X','PROPERTY_*'], FILTER: { 'SECTION_ID': 0 } } },
+    { params: { IBLOCK_TYPE_ID: TYPE_ID, IBLOCK_ID, SELECT: ['ID','NAME','DATE_CREATE','TIMESTAMP_X','PROPERTY_*'], FILTER: { 'SECTION_ID': '' } } },
+  ];
+
+  const allItems = [];
+  for (const t of tries) {
+    try {
+      const r = await performProxyBitrixRequest({
+        webhook,
+        method: 'lists.element.get',
+        params: t.params
+      });
+      const raw = (r && r.result != null) ? r.result : r;
+      if (Array.isArray(raw)) allItems.push(...raw);
+    } catch (_) { /* пропускаем ошибку этой попытки */ }
+  }
+
+  // 3) Удаляем дубликаты по ID
+  const seen = new Set();
+  const unique = [];
+  for (const it of allItems) {
+    const id = it && it.ID ? String(it.ID) : '';
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      unique.push(it);
     }
   }
 
-  // Если всё ещё пусто — отдаём понятную ошибку, чтобы ты её увидел в UI
-  if (!Array.isArray(items) || items.length === 0) {
-    const sample = JSON.stringify(payload ?? null).slice(0, 700);
-    throw new Error(`Bitrix вернул неожиданный формат или пустой список. Сырые данные: ${sample}`);
+  if (!unique.length) {
+    throw new Error('Не удалось прочитать элементы списка: Bitrix вернул 0 записей (возможны права чтения или разделы).');
   }
 
-    // ----- Временный вывод для Mini App -----
-document.body.insertAdjacentHTML('beforeend',
-  `<pre style="
-    color: white;
-    font-size: 10px;
-    background: rgba(0,0,0,0.7);
-    padding: 8px;
-    max-height: 200px;
-    overflow: auto;
-    white-space: pre-wrap;
-    word-break: break-all;
-  ">
-  ${JSON.stringify(payload, null, 2)}
-  </pre>`
-);
-// ----- Конец временного вывода -----
-
-  return items.map(mapBitrixElementToProject).filter(Boolean);
-    
+  return unique.map(mapBitrixElementToProject).filter(Boolean);
 }
+
 
 
 export async function createProject(project) {
@@ -560,90 +573,4 @@ export async function patchProject(id, patch) {
 
     return mapBitrixElementToProject(element || { ID: id });
 }
-
-// ===== ВРЕМЕННАЯ ДИАГНОСТИКА =====
-export async function __debugProbeProjects() {
-  // 0) Проверим, что вебхук есть
-  const webhook = (CONFIG && CONFIG.BITRIX_WEBHOOK) || '';
-  if (!webhook) {
-    alert('Нет CONFIG.BITRIX_WEBHOOK');
-    return;
-  }
-
-  // Хелпер безопасного алерта
-  const show = (label, obj) => {
-    try {
-      alert(`${label}: ` + JSON.stringify(obj, null, 2).slice(0, 950));
-    } catch (e) {
-      alert(`${label}: [cannot stringify]`);
-    }
-  };
-
-  // 1) Список всех списков (видимых вебхуку)
-  let lists;
-  try {
-    lists = await performProxyBitrixRequest({
-      webhook,
-      method: 'lists.get',
-      params: { IBLOCK_TYPE_ID: 'lists' }
-    });
-    show('lists.get', lists);
-  } catch (e) {
-    show('lists.get ERROR', { message: e?.message });
-    return;
-  }
-
-  // 2) Поля у IBLOCK_ID из конфига
-  const iblockId = Number(CONFIG?.PROJECTS?.IBLOCK_ID || 0);
-  if (!iblockId) {
-    alert('CONFIG.PROJECTS.IBLOCK_ID пустой');
-    return;
-  }
-  let fields;
-  try {
-    fields = await performProxyBitrixRequest({
-      webhook,
-      method: 'lists.field.get',
-      params: { IBLOCK_TYPE_ID: 'lists', IBLOCK_ID: iblockId }
-    });
-    show('lists.field.get', fields);
-  } catch (e) {
-    show('lists.field.get ERROR', { message: e?.message });
-    return;
-  }
-
-  // 3) Элементы без SELECT/FILTER (как есть)
-  let plain;
-  try {
-    plain = await performProxyBitrixRequest({
-      webhook,
-      method: 'lists.element.get',
-      params: { IBLOCK_TYPE_ID: 'lists', IBLOCK_ID: iblockId }
-    });
-    show('lists.element.get (plain)', plain);
-  } catch (e) {
-    show('lists.element.get ERROR', { message: e?.message });
-    return;
-  }
-
-  // 4) Элементы с SELECT (на всякий случай)
-  let withSelect;
-  try {
-    withSelect = await performProxyBitrixRequest({
-      webhook,
-      method: 'lists.element.get',
-      params: {
-        IBLOCK_TYPE_ID: 'lists',
-        IBLOCK_ID: iblockId,
-        SELECT: ['ID','NAME','DATE_CREATE','TIMESTAMP_X','PROPERTY_*'],
-        FILTER: {}
-      }
-    });
-    show('lists.element.get (with SELECT)', withSelect);
-  } catch (e) {
-    show('lists.element.get (with SELECT) ERROR', { message: e?.message });
-    return;
-  }
-}
-// ===== КОНЕЦ ДИАГНОСТИКИ =====
 
