@@ -449,22 +449,32 @@ export async function getProjects() {
   const payload = await callBitrixLists('lists.element.get', {
     IBLOCK_TYPE_ID: 'lists',
     IBLOCK_ID,
-    SELECT: ['ID','NAME','DATE_CREATE','TIMESTAMP_X','PROPERTY_*'], // ← важно
-    FILTER: {}                                                       // ← явный фильтр без условий
-    // ELEMENT_ORDER: { 'ID': 'DESC' } // по желанию
+    SELECT: ['ID','NAME','DATE_CREATE','TIMESTAMP_X','PROPERTY_*'],
+    FILTER: {}
   });
 
-  // Разные порталы Bitrix могут отдавать по-разному — разберём все варианты
-  const raw = (payload && payload.result != null) ? payload.result : payload;
+  // ВКЛЮЧАЕМ ЯВНЫЙ ЛОГ ОТВЕТА (временно, для проверки)
+  try {
+    console.debug('[Bitrix getProjects] raw payload:', payload);
+  } catch (_) {}
+
+  // У разных прокси и порталов форма может отличаться:
+  // payload → { result: [...] }  ИЛИ  { data: { result:[...] } }  ИЛИ просто [...]
+  const raw1 = (payload && payload.result != null) ? payload.result : payload;
+  const raw2 = (raw1 && raw1.data != null) ? raw1.data : raw1;
 
   let items = [];
-  if (Array.isArray(raw)) {
-    items = raw;
-  } else if (raw && typeof raw === 'object') {
-    if (Array.isArray(raw.items))      items = raw.items;
-    else if (Array.isArray(raw.elements)) items = raw.elements;
-    else if (Array.isArray(raw.result))   items = raw.result;
-    else items = Object.values(raw).filter(v => v && typeof v === 'object' && ('ID' in v || 'NAME' in v));
+  if (Array.isArray(raw2)) {
+    items = raw2;
+  } else if (raw2 && typeof raw2 === 'object') {
+    if (Array.isArray(raw2.result))       items = raw2.result;
+    else if (Array.isArray(raw2.items))   items = raw2.items;
+    else if (Array.isArray(raw2.elements))items = raw2.elements;
+    else {
+      // Последняя попытка — вытащить все массивы-потомки
+      const candidates = Object.values(raw2).filter(v => Array.isArray(v));
+      if (candidates.length) items = candidates.flat();
+    }
   }
 
   return items.map(mapBitrixElementToProject).filter(Boolean);
