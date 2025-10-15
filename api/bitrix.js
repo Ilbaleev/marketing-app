@@ -1,14 +1,12 @@
-// /api/bitrix.js  — серверлесс-функция для Vercel (ESM)
+// /api/bitrix.js  (Vercel serverless function, ESM)
 
 const ALLOWED_METHODS = new Set([
   'tasks.task.list',
   'profile',
   'user.get',
-  // --- списки (проекты) ---
   'lists.element.get',
   'lists.element.add',
   'lists.element.update',
-  // (не обязательно, но удобно для диагностики)
   'lists.get',
   'lists.field.get'
 ]);
@@ -19,34 +17,21 @@ function setCors(res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Telegram-Init-Data');
 }
 
-// ГЛАВНОЕ: кодируем вложенные объекты как FIELDS[NAME], FIELDS[PROPERTY_123], ...
-function encodeForm(params) {
-  const out = [];
-
-  const walk = (key, value) => {
-    if (value === undefined || value === null) return;
-    if (Array.isArray(value)) {
-      value.forEach((v, i) => walk(`${key}[${i}]`, v));
-    } else if (typeof value === 'object') {
-      Object.entries(value).forEach(([k, v]) => walk(`${key}[${k}]`, v));
-    } else {
-      out.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
-    }
-  };
-
-  Object.entries(params || {}).forEach(([k, v]) => {
-    if (Array.isArray(v)) v.forEach((item, i) => walk(`${k}[${i}]`, item));
-    else if (typeof v === 'object') Object.entries(v).forEach(([kk, vv]) => walk(`${k}[${kk}]`, vv));
-    else out.push(`${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
-  });
-
-  return out.join('&');
-}
-
 function ensureTrailingSlash(value) {
   if (!value) return '';
   const s = value.trim();
   return s.endsWith('/') ? s : `${s}/`;
+}
+
+function toUrlParams(obj = {}) {
+  const p = new URLSearchParams();
+  Object.entries(obj).forEach(([k, v]) => {
+    if (v === undefined || v === null) return;
+    if (Array.isArray(v)) v.forEach(x => p.append(k, String(x)));
+    else if (typeof v === 'object') p.append(k, JSON.stringify(v));
+    else p.append(k, String(v));
+  });
+  return p;
 }
 
 function parseBody(req) {
@@ -58,46 +43,74 @@ function parseBody(req) {
 export default async function handler(req, res) {
   setCors(res);
 
-  if (req.method === 'OPTIONS') return res.status(204).end();
-  if (req.method !== 'POST')   return res.status(405).json({ error: 'Method Not Allowed' });
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method Not Allowed' });
+    return;
+  }
 
   const payload = parseBody(req);
   const webhook = typeof payload.webhook === 'string' ? payload.webhook : '';
   const method  = typeof payload.method  === 'string' ? payload.method.trim() : '';
   const params  = payload.params && typeof payload.params === 'object' ? payload.params : {};
 
-  if (!webhook) return res.status(400).json({ error: 'Webhook URL is required' });
-  if (!method)  return res.status(400).json({ error: 'Bitrix24 method is required' });
-  if (!ALLOWED_METHODS.has(method)) return res.status(403).json({ error: 'Method is not allowed' });
+  if (!webhook) {
+    res.status(400).json({ error: 'Webhook URL is required' });
+    return;
+  }
+  if (!method) {
+    res.status(400).json({ error: 'Bitrix24 method is required' });
+    return;
+  }
+  if (!ALLOWED_METHODS.has(method)) {
+    res.status(403).json({ error: 'Method is not allowed' });
+    return;
+  }
 
   const normalizedWebhook = ensureTrailingSlash(webhook);
-
   let targetUrl;
   try {
     targetUrl = new URL(`${normalizedWebhook}${method}.json`);
   } catch {
-    return res.status(400).json({ error: 'Invalid webhook URL' });
+    res.status(400).json({ error: 'Invalid webhook URL' });
+    return;
   }
+
+  const formBody = toUrlParams(params).toString();
 
   let bitrixResponse;
   try {
     bitrixResponse = await fetch(targetUrl.toString(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: encodeForm(params) // <-- ВАЖНО: правильная форма для FIELDS[...]
+      body: formBody
     });
   } catch (error) {
-    return res.status(502).json({ error: 'Не удалось отправить запрос к Bitrix24', details: error.message });
+    res.status(502).json({ error: 'Не удалось отправить запрос к Bitrix24', details: error.message });
+    return;
   }
 
   const text = await bitrixResponse.text();
-  if (!text) return res.status(bitrixResponse.status).json({});
+  if (!text) {
+    res.status(bitrixResponse.status).json({});
+    return;
+  }
 
   let data;
-  try { data = JSON.parse(text); }
-  catch { return res.status(502).json({ error: 'Bitrix24 вернул невалидный JSON', details: text.slice(0, 2000) }); }
+  try {
+    data = JSON.parse(text);
+  } catch {
+    res.status(502).json({ error: 'Bitrix24 вернул невалидный JSON', details: text.slice(0, 2000) });
+    return;
+  }
 
-  if (!bitrixResponse.ok) return res.status(bitrixResponse.status).json(data);
+  if (!bitrixResponse.ok) {
+    res.status(bitrixResponse.status).json(data);
+    return;
+  }
 
-  return res.status(200).json(data);
+  res.status(200).json(data);
 }
