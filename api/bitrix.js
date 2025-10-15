@@ -23,15 +23,29 @@ function ensureTrailingSlash(value) {
   return s.endsWith('/') ? s : `${s}/`;
 }
 
-function toUrlParams(obj = {}) {
-  const p = new URLSearchParams();
-  Object.entries(obj).forEach(([k, v]) => {
+function encodeForm(params = {}) {
+  const out = [];
+
+  const walk = (key, value) => {
+    if (value === undefined || value === null) return;
+
+    if (Array.isArray(value)) {
+      value.forEach((v, i) => walk(`${key}[${i}]`, v));
+    } else if (typeof value === 'object') {
+      Object.entries(value).forEach(([k, v]) => walk(`${key}[${k}]`, v));
+    } else {
+      out.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
+    }
+  };
+
+  Object.entries(params).forEach(([k, v]) => {
     if (v === undefined || v === null) return;
-    if (Array.isArray(v)) v.forEach(x => p.append(k, String(x)));
-    else if (typeof v === 'object') p.append(k, JSON.stringify(v));
-    else p.append(k, String(v));
+    if (Array.isArray(v)) v.forEach((item, i) => walk(`${k}[${i}]`, item));
+    else if (typeof v === 'object') Object.entries(v).forEach(([kk, vv]) => walk(`${k}[${kk}]`, vv));
+    else out.push(`${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
   });
-  return p;
+
+  return out.join('&');
 }
 
 function parseBody(req) {
@@ -79,7 +93,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const formBody = toUrlParams(params).toString();
+const formBody = encodeForm(params);
 
   let bitrixResponse;
   try {
