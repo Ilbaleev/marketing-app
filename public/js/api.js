@@ -444,20 +444,30 @@ async function callBitrixLists(method, params) {
 }
 
 export async function getProjects() {
-    const { IBLOCK_ID } = ensureProjectsConfig();
-    const payload = await callBitrixLists('lists.element.get', {
-        IBLOCK_TYPE_ID: 'lists',
-        IBLOCK_ID,
-        SELECT: ['ID','NAME','DATE_CREATE','TIMESTAMP_X','PROPERTY_*']
-    });
+  const { IBLOCK_ID } = ensureProjectsConfig();
 
-    const items = Array.isArray(payload?.result)
-        ? payload.result
-        : Array.isArray(payload)
-            ? payload
-            : [];
+  const payload = await callBitrixLists('lists.element.get', {
+    IBLOCK_TYPE_ID: 'lists',
+    IBLOCK_ID,
+    SELECT: ['ID','NAME','DATE_CREATE','TIMESTAMP_X','PROPERTY_*'], // ← важно
+    FILTER: {}                                                       // ← явный фильтр без условий
+    // ELEMENT_ORDER: { 'ID': 'DESC' } // по желанию
+  });
 
-    return items.map(mapBitrixElementToProject).filter(Boolean);
+  // Разные порталы Bitrix могут отдавать по-разному — разберём все варианты
+  const raw = (payload && payload.result != null) ? payload.result : payload;
+
+  let items = [];
+  if (Array.isArray(raw)) {
+    items = raw;
+  } else if (raw && typeof raw === 'object') {
+    if (Array.isArray(raw.items))      items = raw.items;
+    else if (Array.isArray(raw.elements)) items = raw.elements;
+    else if (Array.isArray(raw.result))   items = raw.result;
+    else items = Object.values(raw).filter(v => v && typeof v === 'object' && ('ID' in v || 'NAME' in v));
+  }
+
+  return items.map(mapBitrixElementToProject).filter(Boolean);
 }
 
 export async function createProject(project) {
