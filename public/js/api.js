@@ -393,36 +393,34 @@ function toBitrixPropertyKey(codeOrId) {
 }
 
 function mapBitrixElementToProject(element) {
-    if (!element || typeof element !== 'object') {
-        return null;
-    }
+  if (!element || typeof element !== 'object') return null;
 
-    const { FIELDS = {} } = ensureProjectsConfig();
-    const readProperty = key => {
-        const byId = (typeof key === 'number' || /^\d+$/.test(String(key))) ? `PROPERTY_${key}_VALUE` : null;
-        const byCode = typeof key === 'string' ? `${key}_VALUE` : null;
-        return element[byCode] ?? element[byId] ?? '';
-    };
+  const { FIELDS = {} } = ensureProjectsConfig();
 
-    const normalize = (value, fallback) => {
-        if (value === null || value === undefined) {
-            return fallback;
-        }
+  const readProp = (id) => {
+    const key = `PROPERTY_${id}_VALUE`;
+    let v = element[key];
+    if (Array.isArray(v)) v = v[0];
+    if (v === undefined || v === null) return '';
+    return String(v);
+  };
 
-        const text = String(value).trim();
-        return text || fallback;
-    };
+  const norm = (v, fb) => {
+    if (v === null || v === undefined) return fb;
+    const s = String(v).trim();
+    return s || fb;
+  };
 
-    return {
-        id: normalize(element.ID, ''),
-        title: normalize(element.NAME, 'Без названия'),
-        status: normalize(readProperty(FIELDS.STATUS), 'active'),
-        priority: normalize(readProperty(FIELDS.PRIORITY), 'medium'),
-        siteUrl: normalize(readProperty(FIELDS.SITE_URL), ''),
-        driveUrl: normalize(readProperty(FIELDS.DRIVE_URL), ''),
-        createdAt: normalize(element.DATE_CREATE, ''),
-        updatedAt: normalize(element.TIMESTAMP_X, '')
-    };
+  return {
+    id:       norm(element.ID, ''),
+    title:    norm(element.NAME, 'Без названия'),
+    status:   norm(readProp(FIELDS.STATUS), 'active'),
+    priority: norm(readProp(FIELDS.PRIORITY), 'medium'),
+    siteUrl:  norm(readProp(FIELDS.SITE_URL), ''),
+    driveUrl: norm(readProp(FIELDS.DRIVE_URL), ''),
+    createdAt: norm(element.DATE_CREATE, ''),
+    updatedAt: norm(element.TIMESTAMP_X, '')
+  };
 }
 
 function ensureBitrixWebhook() {
