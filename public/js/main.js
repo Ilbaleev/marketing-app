@@ -398,9 +398,9 @@ async function loadAnalytics({ force = false } = {}) {
     }
 }
 
-import { __debugProbeProjects } from './api.js'; // добавь импорт наверху файла, рядом с другими
+
 async function loadProjects() {
-    try { await __debugProbeProjects(); } catch (e) {}
+
     const container = document.getElementById('projectsContent');
     const filterSelect = document.getElementById('projectFilter');
     const errorContainer = document.getElementById('projectsError');
