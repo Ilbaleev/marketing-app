@@ -88,60 +88,37 @@
             <button class="back-button" data-action="back">← Назад</button>
             <div class="page-header">
                 <h2>Проекты</h2>
-            </div>
-            <p class="hint">Управляйте статусами и ссылками проектов, чтобы команда понимала приоритеты.</p>
-            <form id="projectForm" class="card form-card">
-                <h3>Добавить проект</h3>
-                <div class="form-grid">
-                    <label class="form-field">
-                        <span>Название проекта</span>
-                        <input type="text" name="name" required placeholder="Например, Редизайн сайта">
-                    </label>
-                    <label class="form-field">
-                        <span>Статус</span>
-                        <select name="status" id="projectStatusInput" required>
-                            <option value="active">Активный</option>
-                            <option value="completed">Завершён</option>
-                            <option value="paused">На паузе</option>
-                        </select>
-                    </label>
-                    <label class="form-field">
-                        <span>Приоритет</span>
-                        <select name="priority" required>
-                            <option value="medium">Средний приоритет</option>
-                            <option value="elevated">Повышенный приоритет</option>
-                            <option value="high">Высокий приоритет</option>
-                        </select>
-                    </label>
-                    <label class="form-field">
-                        <span>Сайт</span>
-                        <input type="url" name="siteUrl" placeholder="https://example.ru">
-                    </label>
-                    <label class="form-field">
-                        <span>Ссылка на Диск</span>
-                        <input type="url" name="driveUrl" placeholder="https://disk.yandex.ru/d/example2...">
-                    </label>
-                    <label class="form-field">
-                        <span>Дата создания</span>
-                        <input type="date" name="createdAt">
-                    </label>
+                <div class="page-actions">
+                    <select id="projectFilter">
+                        <option value="active">Активные</option>
+                        <option value="paused">На паузе</option>
+                        <option value="done">Завершённые</option>
+                        <option value="all">Все</option>
+                    </select>
                 </div>
-                <button type="submit" class="menu-button">Добавить проект</button>
-            </form>
-
-            <div class="page-actions project-actions">
-                <label for="projectStatusFilter" class="sr-only">Фильтр статуса</label>
-                <select id="projectStatusFilter">
-                    <option value="active">Активные</option>
-                    <option value="completed">Завершённые</option>
-                    <option value="paused">На паузе</option>
-                    <option value="all">Все</option>
-                </select>
+                
             </div>
-
-            <div id="projectContent" class="project-list">
-                <div class="empty-state">Добавьте первый проект, чтобы он появился в списке.</div>
+            <div class="stats">
+                <h3>Добавить проект</h3>
+                <form id="projectForm" class="form-grid">
+                    <input name="title" type="text" placeholder="Название проекта" required />
+                    <select name="status">
+                        <option value="active">Статус: Активный</option>
+                        <option value="paused">Статус: На паузе</option>
+                        <option value="done">Статус: Завершён</option>
+                    </select>
+                    <select name="priority">
+                        <option value="medium">Приоритет: Средний</option>
+                        <option value="high">Приоритет: Высокий</option>
+                        <option value="low">Приоритет: Низкий</option>
+                    </select>
+                    <input name="siteUrl" type="url" placeholder="Сайт: https://..." />
+                    <input name="driveUrl" type="url" placeholder="Ссылка на диск: https://..." />
+                    <button class="secondary-button" type="submit">Сохранить</button>
+                </form>
             </div>
+            <div id="projectsError" class="error hidden"></div>
+            <div id="projectsContent" class="task-list"><div class="loading">Загружаем проекты...</div></div>
         </section>
 
         <section id="settings" class="page">
