@@ -484,9 +484,6 @@ export async function getProjects() {
 }
 
 
-  return items.map(mapBitrixElementToProject).filter(Boolean);
-}
-
 export async function createProject(project) {
   const { IBLOCK_ID } = ensureProjectsConfig();
 
