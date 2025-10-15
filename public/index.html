@@ -43,7 +43,7 @@
             <nav class="menu">
                 <button class="menu-button" data-page-target="tasks">📋 Текущие задачи</button>
                 <button class="menu-button" data-page-target="analytics">📊 Аналитика</button>
-                <button class="menu-button" data-page-target="team">👥 Команда</button>
+                <button class="menu-button" data-page-target="projects">📁 Проекты</button>
                 <button class="menu-button" data-page-target="settings">⚙️ Настройки</button>
             </nav>
         </section>
@@ -84,14 +84,63 @@
             <p class="hint" id="analyticsUpdatedAt">Обновлено: —</p>
         </section>
 
-        <section id="team" class="page">
+        <section id="projects" class="page">
             <button class="back-button" data-action="back">← Назад</button>
             <div class="page-header">
-                <h2>Команда</h2>
+                <h2>Проекты</h2>
             </div>
-            <p class="hint">Добавьте сюда ключевых сотрудников, чтобы коллеги быстро находили контакты.</p>
-            <div id="teamContent">
-                <div class="loading">Загружаем команду...</div>
+            <p class="hint">Управляйте статусами и ссылками проектов, чтобы команда понимала приоритеты.</p>
+            <form id="projectForm" class="card form-card">
+                <h3>Добавить проект</h3>
+                <div class="form-grid">
+                    <label class="form-field">
+                        <span>Название проекта</span>
+                        <input type="text" name="name" required placeholder="Например, Редизайн сайта">
+                    </label>
+                    <label class="form-field">
+                        <span>Статус</span>
+                        <select name="status" id="projectStatusInput" required>
+                            <option value="active">Активный</option>
+                            <option value="completed">Завершён</option>
+                            <option value="paused">На паузе</option>
+                        </select>
+                    </label>
+                    <label class="form-field">
+                        <span>Приоритет</span>
+                        <select name="priority" required>
+                            <option value="medium">Средний приоритет</option>
+                            <option value="elevated">Повышенный приоритет</option>
+                            <option value="high">Высокий приоритет</option>
+                        </select>
+                    </label>
+                    <label class="form-field">
+                        <span>Сайт</span>
+                        <input type="url" name="siteUrl" placeholder="https://example.com">
+                    </label>
+                    <label class="form-field">
+                        <span>Ссылка на Диск</span>
+                        <input type="url" name="driveUrl" placeholder="https://drive.google.com/...">
+                    </label>
+                    <label class="form-field">
+                        <span>Дата создания</span>
+                        <input type="date" name="createdAt">
+                    </label>
+                </div>
+                <button type="submit" class="menu-button">Добавить проект</button>
+            </form>
+
+            <div class="page-actions project-actions">
+                <label for="projectStatusFilter" class="sr-only">Фильтр статуса</label>
+                <select id="projectStatusFilter">
+                    <option value="active">Активные</option>
+                    <option value="completed">Завершённые</option>
+                    <option value="paused">На паузе</option>
+                    <option value="all">Все</option>
+                </select>
+            </div>
+
+            <div id="projectContent" class="project-list">
+                <div class="empty-state">Добавьте первый проект, чтобы он появился в списке.</div>
             </div>
         </section>
 
