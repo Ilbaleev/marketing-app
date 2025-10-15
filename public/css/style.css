@@ -120,7 +120,7 @@ select:focus-visible {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 18px;
+    margin-bottom: 5px;
 }
 
 .page-actions {
@@ -197,6 +197,7 @@ select:focus-visible {
     justify-content: space-between;
     align-items: center;
     gap: 10px;
+    margin: 0 0 12px;
 }
 
 .task-title {
