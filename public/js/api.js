@@ -347,6 +347,7 @@ export async function fetchTasks({
 }
 
 function ensureProjectsConfig() {
+    
     const projectsConfig = CONFIG.PROJECTS;
 
     if (!projectsConfig || !projectsConfig.IBLOCK_ID) {
@@ -355,43 +356,41 @@ function ensureProjectsConfig() {
 
     return projectsConfig;
 }
+// Ключ свойства: ID -> PROPERTY_<ID>, КОД -> сам код
+const propKey = k => (typeof k === 'number' || /^\d+$/.test(String(k)))
+  ? `PROPERTY_${k}`
+  : String(k);
+
+// Собираем объект FIELDS для Bitrix Lists
+function toFields(project) {
+  const { FIELDS = {} } = ensureProjectsConfig();
+
+  const title = typeof project?.title === 'string'
+    ? project.title.trim()
+    : project?.title;
+
+  const fields = {
+    NAME: title || 'Без названия'
+  };
+
+  const status   = typeof project?.status === 'string'  ? project.status.trim()  : project?.status;
+  const priority = typeof project?.priority === 'string'? project.priority.trim(): project?.priority;
+  const siteUrl  = typeof project?.siteUrl === 'string' ? project.siteUrl.trim() : project?.siteUrl;
+  const driveUrl = typeof project?.driveUrl === 'string'? project.driveUrl.trim(): project?.driveUrl;
+
+  if (status)   fields[propKey(FIELDS.STATUS)]   = status;
+  if (priority) fields[propKey(FIELDS.PRIORITY)] = priority;
+  if (siteUrl)  fields[propKey(FIELDS.SITE_URL)] = siteUrl;
+  if (driveUrl) fields[propKey(FIELDS.DRIVE_URL)] = driveUrl;
+
+  return fields;
+}
 
 function toBitrixPropertyKey(codeOrId) {
     if (typeof codeOrId === 'number' || /^\d+$/.test(String(codeOrId))) {
         return `PROPERTY_${codeOrId}`;
     }
     return codeOrId;
-}
-
-function mapProjectToBitrixPayload(project) {
-    const { IBLOCK_ID, FIELDS = {} } = ensureProjectsConfig();
-    const title = typeof project?.title === 'string' ? project.title.trim() : project?.title;
-    const payload = {
-        IBLOCK_TYPE_ID: 'lists',
-        IBLOCK_ID,
-        NAME: title || 'Без названия',
-        PROPERTY_VALUES: {}
-    };
-
-    const status = typeof project?.status === 'string' ? project.status.trim() : project?.status;
-    const priority = typeof project?.priority === 'string' ? project.priority.trim() : project?.priority;
-    const siteUrl = typeof project?.siteUrl === 'string' ? project.siteUrl.trim() : project?.siteUrl;
-    const driveUrl = typeof project?.driveUrl === 'string' ? project.driveUrl.trim() : project?.driveUrl;
-
-    if (status) {
-        payload.PROPERTY_VALUES[toBitrixPropertyKey(FIELDS.STATUS)] = status;
-    }
-    if (priority) {
-        payload.PROPERTY_VALUES[toBitrixPropertyKey(FIELDS.PRIORITY)] = priority;
-    }
-    if (siteUrl) {
-        payload.PROPERTY_VALUES[toBitrixPropertyKey(FIELDS.SITE_URL)] = siteUrl;
-    }
-    if (driveUrl) {
-        payload.PROPERTY_VALUES[toBitrixPropertyKey(FIELDS.DRIVE_URL)] = driveUrl;
-    }
-
-    return payload;
 }
 
 function mapBitrixElementToProject(element) {
@@ -463,23 +462,29 @@ export async function getProjects() {
 
 export async function createProject(project) {
     const { IBLOCK_ID } = ensureProjectsConfig();
-    const result = await callBitrixLists('lists.element.add', mapProjectToBitrixPayload(project));
-    const id = result?.result || result?.ID || result;
 
-    const fetched = await callBitrixLists('lists.element.get', {
+    // КЛЮЧЕВОЕ: отправляем FIELDS{ NAME, PROPERTY_* }
+    await callBitrixLists('lists.element.add', {
         IBLOCK_TYPE_ID: 'lists',
         IBLOCK_ID,
-        FILTER: { ID: id }
+        FIELDS: toFields(project)
     });
 
-    const element = Array.isArray(fetched?.result)
-        ? fetched.result[0]
-        : Array.isArray(fetched)
-            ? fetched[0]
-            : null;
+    // Перечитаем список (или можешь добавить фильтр по NAME)
+    const fetched = await callBitrixLists('lists.element.get', {
+        IBLOCK_TYPE_ID: 'lists',
+        IBLOCK_ID
+    });
 
-    return mapBitrixElementToProject(element || { ID: id, NAME: project?.title });
+    const items = Array.isArray(fetched?.result) ? fetched.result
+                : Array.isArray(fetched) ? fetched
+                : [];
+
+    const element = items[0] || null; // берём первый (или найди по имени)
+
+    return mapBitrixElementToProject(element || { ID: '0', NAME: project?.title });
 }
+
 
 export async function patchProject(id, patch) {
     if (!id) {
@@ -487,19 +492,14 @@ export async function patchProject(id, patch) {
     }
 
     const { IBLOCK_ID } = ensureProjectsConfig();
-    const mapped = mapProjectToBitrixPayload({ ...patch, title: patch?.title });
-    const updatePayload = {
+
+    // ВАЖНО: для update в Lists нужен ELEMENT_ID и FIELDS{...}
+    await callBitrixLists('lists.element.update', {
         IBLOCK_TYPE_ID: 'lists',
         IBLOCK_ID,
-        ID: id,
-        PROPERTY_VALUES: mapped.PROPERTY_VALUES
-    };
-
-    if (patch?.title) {
-        updatePayload.NAME = mapped.NAME;
-    }
-
-    await callBitrixLists('lists.element.update', updatePayload);
+        ELEMENT_ID: id,
+        FIELDS: toFields(patch)  // сюда попадут только те поля, что передали (напр., {status})
+    });
 
     const fetched = await callBitrixLists('lists.element.get', {
         IBLOCK_TYPE_ID: 'lists',
@@ -507,12 +507,13 @@ export async function patchProject(id, patch) {
         FILTER: { ID: id }
     });
 
-    const element = Array.isArray(fetched?.result)
-        ? fetched.result[0]
-        : Array.isArray(fetched)
-            ? fetched[0]
-            : null;
+    const items = Array.isArray(fetched?.result) ? fetched.result
+                : Array.isArray(fetched) ? fetched
+                : [];
+
+    const element = items[0] || null;
 
     return mapBitrixElementToProject(element || { ID: id });
 }
+
 
