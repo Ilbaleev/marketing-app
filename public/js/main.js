@@ -14,14 +14,17 @@ import {
 } from './helpers.js';
 import {
     callBitrixAPI,
+    createProject,
     fetchTasks,
+    getProjects,
     normalizeTaskRecord,
-    normalizeTasksResponse
+    normalizeTasksResponse,
+    patchProject
 } from './api.js';
 import {
     clearInlineError,
     renderAnalytics,
-    renderProjects,  
+    renderProjectsList,
     renderTask,
     showInlineError,
     toggleHidden,
@@ -57,12 +60,9 @@ const hasBackButton = Boolean(tg && tg.BackButton);
 const state = {
     tasks: [],
     tasksLoadedAt: null,
-    tasksTotal: 0
-};
-
-const projectsState = {
-    items: (CONFIG.PROJECTS || []).map(normalizeProjectRecord).filter(Boolean),
-    activeFilter: 'active'
+    tasksTotal: 0,
+    projects: [],
+    projectsLoadedAt: null
 };
 
 
@@ -82,6 +82,7 @@ const demoNoticeEl = document.getElementById('demoNotice');
 const statsErrorEl = document.getElementById('statsError');
 const tasksErrorEl = document.getElementById('tasksError');
 const analyticsErrorEl = document.getElementById('analyticsError');
+const projectsErrorEl = document.getElementById('projectsError');
 const statsUpdatedAtEl = document.getElementById('statsUpdatedAt');
 const tasksUpdatedAtEl = document.getElementById('tasksUpdatedAt');
 const analyticsUpdatedAtEl = document.getElementById('analyticsUpdatedAt');
@@ -162,21 +163,20 @@ function setupEventHandlers() {
             testBitrixConnection();
         });
     }
-}
-
-    const projectFilter = document.getElementById('projectStatusFilter');
+    const projectFilter = document.getElementById('projectFilter');
     if (projectFilter) {
-        projectFilter.addEventListener('change', event => {
-            projectsState.activeFilter = event.target.value;
-            loadProjects({ filter: event.target.value });
+        projectFilter.addEventListener('change', () => {
+            loadProjects();
         });
     }
 
     const projectForm = document.getElementById('projectForm');
     if (projectForm) {
-        projectForm.addEventListener('submit', handleProjectSubmit);
+        projectForm.addEventListener('submit', onCreateProject);
     }
-
+    
+    document.addEventListener('click', onProjectStatusToggle);
+}
 function detectUser() {
     const hasManualOverrides = Boolean(manualTelegramId || manualBitrixUserId);
 
@@ -393,95 +393,116 @@ async function loadAnalytics({ force = false } = {}) {
     }
 }
 
-function loadProjects({ filter } = {}) {
-    const container = document.getElementById('projectContent');
+async function loadProjects() {
+    const container = document.getElementById('projectsContent');
     if (!container) return;
-    const filterSelect = document.getElementById('projectStatusFilter');
-    const selectedFilter = filter || projectsState.activeFilter || (filterSelect ? filterSelect.value : 'active');
-
-    projectsState.activeFilter = selectedFilter;
+    const filterSelect = document.getElementById('projectFilter');
+    const allowedFilters = new Set(['active', 'paused', 'done', 'all']);
+    let selectedFilter = filterSelect ? filterSelect.value : 'active';
+    if (!allowedFilters.has(selectedFilter)) {
+        selectedFilter = 'all';
+    }
 
     if (filterSelect && filterSelect.value !== selectedFilter) {
         filterSelect.value = selectedFilter;
     }
+    
+    container.innerHTML = '<div class="loading">Загружаем проекты...</div>';
+    clearInlineError(projectsErrorEl);
+    try {
+        const projects = await getProjects();
+        state.projects = Array.isArray(projects) ? projects : [];
+        state.projectsLoadedAt = new Date();
 
-    const filteredProjects = selectedFilter === 'all'
-        ? projectsState.items
-        : projectsState.items.filter(project => project.status === selectedFilter);
+        const filteredProjects = selectedFilter === 'all'
+            ? state.projects
+            : state.projects.filter(project => project && project.status === selectedFilter);
 
-    container.innerHTML = renderProjects(filteredProjects);
+        container.innerHTML = renderProjectsList(filteredProjects);
+    } catch (error) {
+        console.error('Ошибка загрузки проектов:', error);
+        state.projects = [];
+        container.innerHTML = '';
+        showInlineError(projectsErrorEl, error.message || 'Не удалось загрузить проекты.');
+    }
 }
 
-function handleProjectSubmit(event) {
+async function onCreateProject(event) {
     event.preventDefault();
 
     const form = event.target;
+    if (!form) {
+        return;
+    }
     const formData = new FormData(form);
-    const name = (formData.get('name') || '').toString().trim();
+    const title = (formData.get('title') || '').toString().trim();
 
-    if (!name) {
+    if (!title) {
+        showInlineError(projectsErrorEl, 'Введите название проекта.');
         return;
     }
 
-    const createdAtInput = formData.get('createdAt');
-    let createdAtValue = createdAtInput ? createdAtInput.toString() : '';
-    if (createdAtValue) {
-        const date = new Date(createdAtValue);
-        createdAtValue = Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
-    } else {
-        createdAtValue = new Date().toISOString();
-    }
-
-    const newProject = normalizeProjectRecord({
-        id: createProjectId(),
-        name,
+    const payload = {
+        title,
         status: (formData.get('status') || 'active').toString(),
         priority: (formData.get('priority') || 'medium').toString(),
         siteUrl: (formData.get('siteUrl') || '').toString().trim(),
-        driveUrl: (formData.get('driveUrl') || '').toString().trim(),
-        createdAt: createdAtValue
-    });
-
-    projectsState.items = [newProject, ...projectsState.items];
-
-    form.reset();
-
-    const statusInput = document.getElementById('projectStatusInput');
-    if (statusInput) {
-        statusInput.value = 'active';
-    }
-
-    projectsState.activeFilter = 'all';
-    const filterSelect = document.getElementById('projectStatusFilter');
-    if (filterSelect) {
-        filterSelect.value = 'all';
-    }
-
-    loadProjects({ filter: 'all' });
-}
-
-function createProjectId() {
-    return `p-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-}
-
-function normalizeProjectRecord(project) {
-    if (!project) {
-        return null;
-    }
-
-    const createdAt = project.createdAt || project.created_at || project.dateCreated || project.created;
-    const createdDate = createdAt ? new Date(createdAt) : new Date();
-
-    return {
-        id: project.id || createProjectId(),
-        name: project.name || 'Без названия',
-        status: (project.status || 'active').toString(),
-        priority: (project.priority || 'medium').toString(),
-        siteUrl: project.siteUrl || project.site || '',
-        driveUrl: project.driveUrl || project.drive || project.diskUrl || '',
-        createdAt: Number.isNaN(createdDate.getTime()) ? new Date().toISOString() : createdDate.toISOString()
+        driveUrl: (formData.get('driveUrl') || '').toString().trim()
     };
 
+    const submitButton = form.querySelector('[type="submit"]');
+    if (submitButton) {
+        submitButton.disabled = true;
+    }
+
+    clearInlineError(projectsErrorEl);
+
+    try {
+        await createProject(payload);
+        form.reset();
+        await loadProjects();
+    } catch (error) {
+        console.error('Ошибка создания проекта:', error);
+        showInlineError(projectsErrorEl, error.message || 'Не удалось создать проект.');
+    } finally {
+        if (submitButton) {
+            submitButton.disabled = false;
+        }
+    }
+}
+async function onProjectStatusToggle(event) {
+    const button = event.target.closest('.project-status-toggle');
+    if (!button) {
+        return;
+    }
+
+    event.preventDefault();
+    const projectId = button.dataset.id;
+    if (!projectId) {
+        return;
+    }
+
+    clearInlineError(projectsErrorEl);
+
+    const statuses = ['active', 'paused', 'done'];
+    const currentProject = state.projects.find(project => project && project.id === projectId);
+    const currentStatus = currentProject && typeof currentProject.status === 'string'
+        ? currentProject.status
+        : 'active';
+    const currentIndex = statuses.indexOf(currentStatus);
+    const nextStatus = statuses[(currentIndex + 1) % statuses.length];
+
+    button.disabled = true;
+
+    try {
+        await patchProject(projectId, { status: nextStatus });
+        await loadProjects();
+    } catch (error) {
+        console.error('Ошибка обновления статуса проекта:', error);
+        showInlineError(projectsErrorEl, error.message || 'Не удалось обновить статус проекта.');
+    } finally {
+        button.disabled = false;
+    }
 }
 
 async function testBitrixConnection() {
