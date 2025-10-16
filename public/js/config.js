@@ -8,7 +8,7 @@ import { ensureTrailingSlash, parseManualOverrides } from './helpers.js';
 export const CONFIG = {
     BITRIX_WEBHOOK: 'https://mpb.bitrix24.kz/rest/13/f92fhs0h39vmg991/',
     USER_MAPPING: {
-        '721249582': '13'
+        '721249582': '13',
         '458063074': '27', 
         '1607374454': '41', 
         '458152540': '29', 
@@ -22,7 +22,7 @@ export const CONFIG = {
         '865562957': '31', 
         '5555097406': '35', 
         '7384473922': '47', 
-        '993670406': '55',
+        '993670406': '55'
     },
     PROJECTS: {
         IBLOCK_ID: '31',
